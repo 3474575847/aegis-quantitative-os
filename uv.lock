@@ -92,20 +92,30 @@ version = "0.1.0"
 source = { editable = "packages/sensors" }
 dependencies = [
     { name = "aegis-events" },
+    { name = "aegis-observability" },
     { name = "httpx" },
     { name = "prometheus-client" },
     { name = "pydantic" },
     { name = "tenacity" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "aegis-storage" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "aegis-events", editable = "packages/events" },
+    { name = "aegis-observability", editable = "packages/observability" },
     { name = "httpx" },
     { name = "prometheus-client" },
     { name = "pydantic" },
     { name = "tenacity" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "aegis-storage", editable = "packages/storage" }]
 
 [[package]]
 name = "aegis-signals"
@@ -139,6 +149,10 @@ dependencies = [
     { name = "aegis-core" },
     { name = "aegis-events" },
     { name = "aegis-observability" },
+    { name = "aegis-sensors" },
+    { name = "aegis-storage" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
 ]
 
 [package.metadata]
@@ -146,6 +160,10 @@ requires-dist = [
     { name = "aegis-core", editable = "packages/core" },
     { name = "aegis-events", editable = "packages/events" },
     { name = "aegis-observability", editable = "packages/observability" },
+    { name = "aegis-sensors", editable = "packages/sensors" },
+    { name = "aegis-storage", editable = "packages/storage" },
+    { name = "pytest", specifier = ">=9.0.3" },
+    { name = "pytest-asyncio", specifier = ">=1.3.0" },
 ]
 
 [[package]]

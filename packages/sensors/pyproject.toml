@@ -5,6 +5,7 @@ description = "Aegis-Alpha sensors package"
 requires-python = ">=3.12"
 dependencies = [
     "aegis-events",
+    "aegis-observability",
     "httpx",
     "prometheus-client",
     "pydantic",
@@ -17,6 +18,13 @@ build-backend = "hatchling.build"
 
 [tool.uv.sources]
 aegis-events = { workspace = true }
+aegis-observability = { workspace = true }
+aegis-storage = { workspace = true }
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+
+[dependency-groups]
+dev = [
+    "aegis-storage",
+]

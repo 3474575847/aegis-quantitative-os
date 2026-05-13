@@ -1,11 +1,9 @@
 from collections.abc import Sequence
-from typing import Any, TypeVar
+from typing import Any
 
 from aegis_storage.models.base import Base
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-T = TypeVar("T", bound=Base)
 
 
 class BaseRepository[T: Base]:
@@ -17,6 +15,10 @@ class BaseRepository[T: Base]:
         self.session.add(entity)
         await self.session.flush()
         return entity
+
+    async def add_all(self, entities: Sequence[T]) -> None:
+        self.session.add_all(entities)
+        await self.session.flush()
 
     async def get_by_id(self, entity_id: Any) -> T | None:
         return await self.session.get(self.model, entity_id)

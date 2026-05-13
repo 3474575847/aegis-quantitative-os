@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from aegis_storage.models.base import Base
@@ -28,6 +29,19 @@ class DatabaseManager:
     async def create_all(self) -> None:
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+
+            # Initialize TimescaleDB hypertables
+            await conn.execute(
+                text(
+                    "SELECT create_hypertable('raw_events', 'received_at', if_not_exists => TRUE);"
+                )
+            )
+            await conn.execute(
+                text(
+                    "SELECT create_hypertable('normalized_events', 'occurred_at', "
+                    "if_not_exists => TRUE);"
+                )
+            )
 
     async def close(self) -> None:
         await self.engine.dispose()
