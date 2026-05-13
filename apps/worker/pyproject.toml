@@ -1,0 +1,19 @@
+[project]
+name = "aegis-worker"
+version = "0.1.0"
+description = "Aegis-Alpha worker application"
+requires-python = ">=3.12"
+dependencies = [
+    "aegis-core",
+    "aegis-events",
+    "aegis-observability",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv.sources]
+aegis-core = { workspace = true }
+aegis-events = { workspace = true }
+aegis-observability = { workspace = true }
