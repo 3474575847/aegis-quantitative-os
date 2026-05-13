@@ -1,23 +1,23 @@
 import json
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx
 from aegis_events.models import Event
 
-from aegis_sensors.base import BaseSensor
+from aegis_sensors.base import BaseSensor, SensorConfig
 
 
-class RedditFinanceSensor(BaseSensor[Any]):
-    def __init__(self, config: Any, client: httpx.AsyncClient | None = None) -> None:
+class RedditFinanceSensor(BaseSensor[SensorConfig, dict[str, Any]]):
+    def __init__(self, config: SensorConfig, client: httpx.AsyncClient | None = None) -> None:
         super().__init__(config)
         self._client = client
 
-    async def fetch(self) -> Any:
+    async def fetch(self) -> dict[str, Any]:
         if self.config.mock_mode and self.config.mock_path:
             with Path(self.config.mock_path).open() as f:
-                return json.load(f)
+                return cast(dict[str, Any], json.load(f))
 
         url = "https://www.reddit.com/r/wallstreetbets/new.json?limit=10"
 
@@ -25,14 +25,14 @@ class RedditFinanceSensor(BaseSensor[Any]):
         if self._client:
             response = await self._client.get(url, headers={"User-Agent": "Aegis-Alpha/0.1.0"})
             response.raise_for_status()
-            return response.json()
+            return cast(dict[str, Any], response.json())
 
         async with httpx.AsyncClient() as client:
             response = await client.get(url, headers={"User-Agent": "Aegis-Alpha/0.1.0"})
             response.raise_for_status()
-            return response.json()
+            return cast(dict[str, Any], response.json())
 
-    async def normalize(self, data: Any) -> list[Event]:
+    async def normalize(self, data: dict[str, Any]) -> list[Event]:
         events = []
         posts = data.get("data", {}).get("children", [])
         for post in posts:

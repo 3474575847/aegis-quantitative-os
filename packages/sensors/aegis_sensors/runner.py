@@ -7,14 +7,14 @@ from aegis_sensors.metrics import EVENTS_PROCESSED, SENSOR_ERRORS, SENSOR_LATENC
 
 
 class SensorRunner:
-    def __init__(self, sensors: list[BaseSensor[Any]]):
+    def __init__(self, sensors: list[BaseSensor[Any, Any]]):
         self.sensors = sensors
 
     async def run_once(self) -> None:
         tasks = [self._run_sensor(sensor) for sensor in self.sensors]
         await asyncio.gather(*tasks)
 
-    async def _run_sensor(self, sensor: BaseSensor[Any]) -> None:
+    async def _run_sensor(self, sensor: BaseSensor[Any, Any]) -> None:
         sensor_id = sensor.config.sensor_id
         start_time = time.perf_counter()
 
