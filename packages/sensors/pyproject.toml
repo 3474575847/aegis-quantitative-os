@@ -1,0 +1,10 @@
+[project]
+name = "aegis-sensors"
+version = "0.1.0"
+description = "Aegis-Alpha sensors package"
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

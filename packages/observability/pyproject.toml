@@ -1,0 +1,10 @@
+[project]
+name = "aegis-observability"
+version = "0.1.0"
+description = "Aegis-Alpha observability package"
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
