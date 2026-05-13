@@ -20,9 +20,6 @@ depends_on: Union[str, Sequence[str], None] = ${repr(depends_on)}
 
 def upgrade() -> None:
 ${upgrades if upgrades else "pass"}
-    # Initialize TimescaleDB Hypertables
-    op.execute("SELECT create_hypertable('raw_events', 'received_at', if_not_exists => TRUE);")
-    op.execute("SELECT create_hypertable('normalized_events', 'occurred_at', if_not_exists => TRUE);")
 
 
 def downgrade() -> None:

@@ -3,7 +3,9 @@ name = "aegis-events"
 version = "0.1.0"
 description = "Aegis-Alpha events package"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pydantic>=2.13.4",
+]
 
 [build-system]
 requires = ["hatchling"]

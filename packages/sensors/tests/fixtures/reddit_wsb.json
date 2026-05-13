@@ -1,0 +1,26 @@
+{
+  "data": {
+    "children": [
+      {
+        "data": {
+          "title": "GME to the moon!",
+          "subreddit": "wallstreetbets",
+          "author": "diamond_hands",
+          "score": 1000,
+          "url": "https://reddit.com/r/wsb/gme",
+          "created_utc": 1715560000
+        }
+      },
+      {
+        "data": {
+          "title": "Inflation is cooling",
+          "subreddit": "finance",
+          "author": "bear_market",
+          "score": 500,
+          "url": "https://reddit.com/r/finance/inflation",
+          "created_utc": 1715561000
+        }
+      }
+    ]
+  }
+}
