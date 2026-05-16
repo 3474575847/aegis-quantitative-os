@@ -1,5 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
+from typing import Any
 
 from aegis_events.models import Event
 from pydantic import BaseModel
@@ -16,7 +17,7 @@ class SensorConfig(BaseModel):
     mock_path: str | None = None
 
 
-class BaseSensor[T: BaseModel, R](ABC):
+class BaseSensor[T: BaseModel](ABC):
     def __init__(self, config: SensorConfig) -> None:
         self.config = config
 
@@ -39,15 +40,15 @@ class BaseSensor[T: BaseModel, R](ABC):
             raise
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-    async def _fetch_with_retry(self) -> R:
+    async def _fetch_with_retry(self) -> Any:
         return await self.fetch()
 
     @abstractmethod
-    async def fetch(self) -> R:
+    async def fetch(self) -> Any:
         pass
 
     @abstractmethod
-    async def normalize(self, data: R) -> list[Event]:
+    async def normalize(self, data: Any) -> list[Event]:
         pass
 
     @abstractmethod

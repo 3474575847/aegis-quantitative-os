@@ -38,3 +38,9 @@ This roadmap outlines the phased development of the Aegis-Alpha quantitative res
 - [ ] Implement Signal Proposal API (allowing agents to define new factors).
 - [ ] Automated validation and backtesting of agent-proposed signals.
 - [ ] Advanced observability for agent-driven system changes.
+
+## Event System Evolution
+- [x] Initial In-Memory Event Bus (Foundation)
+- [ ] Redis Streams integration for distributed event routing.
+- [ ] Full Replay Engine for historical research simulation.
+- [ ] Real-time event visualization in the Command Center.

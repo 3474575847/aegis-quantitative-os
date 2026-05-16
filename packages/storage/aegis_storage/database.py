@@ -42,6 +42,9 @@ class DatabaseManager:
                     "if_not_exists => TRUE);"
                 )
             )
+            await conn.execute(
+                text("SELECT create_hypertable('event_log', 'timestamp', if_not_exists => TRUE);")
+            )
 
     async def close(self) -> None:
         await self.engine.dispose()

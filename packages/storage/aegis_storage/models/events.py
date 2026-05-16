@@ -41,3 +41,27 @@ class NormalizedEvent(Base):
         Index("idx_normalized_events_type", "event_type"),
         Index("idx_normalized_events_data", "data", postgresql_using="gin"),
     )
+
+
+class EventLog(Base):
+    """System-wide event log for audit and replay."""
+
+    __tablename__ = "event_log"
+
+    event_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), primary_key=True, nullable=False
+    )
+    source: Mapped[str] = mapped_column(String(255), nullable=False)
+    correlation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, name="metadata", nullable=False, default=dict
+    )
+
+    __table_args__ = (
+        Index("idx_event_log_type", "event_type"),
+        Index("idx_event_log_id", "event_id"),
+        Index("idx_event_log_correlation", "correlation_id"),
+    )

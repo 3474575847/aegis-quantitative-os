@@ -70,3 +70,15 @@ Integrated telemetry for system health and research quality.
 ├── infrastructure/     # Docker, Terraform, K8s
 └── docs/               # Architecture & Specifications
 ```
+
+## Event System Design
+Aegis-Alpha uses an internal, asynchronous event bus to decouple components.
+
+### Event Lifecycle
+1. **Emit**: Components create typed Pydantic models.
+2. **Route**: The `InMemoryEventBus` handles routing to multiple subscribers.
+3. **Persist**: The `EventPersistenceHandler` automatically logs all system events to the `event_log` hypertable.
+4. **Isolate**: Subscriber failures are caught at the bus level, ensuring system stability.
+
+### Extensibility
+The `EventPublisher` interface allows for future migration to distributed brokers like Redis Streams, NATS, or Kafka without changing business logic in sensors or signal processors.
