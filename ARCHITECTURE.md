@@ -82,3 +82,6 @@ Aegis-Alpha uses an internal, asynchronous event bus to decouple components.
 
 ### Extensibility
 The `EventPublisher` interface allows for future migration to distributed brokers like Redis Streams, NATS, or Kafka without changing business logic in sensors or signal processors.
+
+## Signal Engine
+Aegis-Alpha employs a deterministic, event-driven signal engine for quantitative research. It uses vectorized rolling analytics to maintain performance and consistency between live research and historical backtesting.

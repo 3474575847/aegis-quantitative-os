@@ -44,3 +44,10 @@ This roadmap outlines the phased development of the Aegis-Alpha quantitative res
 - [ ] Redis Streams integration for distributed event routing.
 - [ ] Full Replay Engine for historical research simulation.
 - [ ] Real-time event visualization in the Command Center.
+
+## Signal Engine Evolution
+- [x] Foundational Signal Engine (deterministic pipelines)
+- [x] Rolling Analytics Library (NumPy/Pandas)
+- [ ] Multi-asset factor scoring system.
+- [ ] Cross-sectional signal normalization.
+- [ ] Real-time signal decay monitoring.

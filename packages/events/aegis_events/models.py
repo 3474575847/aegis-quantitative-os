@@ -49,8 +49,23 @@ class SensorFailed(BaseEvent):
     error: str
 
 
-class SignalGenerated(BaseEvent):
-    event_type: str = "SignalGenerated"
+class SignalGenerationTriggered(BaseEvent):
+    event_type: str = "SignalGenerationTriggered"
+    signal_id: UUID
+
+
+class SignalComputed(BaseEvent):
+    event_type: str = "SignalComputed"
+
+
+class SignalFailed(BaseEvent):
+    event_type: str = "SignalFailed"
+    error: str
+
+
+class SignalPersisted(BaseEvent):
+    event_type: str = "SignalPersisted"
+    result_id: UUID
 
 
 class BacktestCompleted(BaseEvent):
