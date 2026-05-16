@@ -5,8 +5,8 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class Event(BaseModel):
-    """Event model for data events (legacy/compatibility)."""
+class LegacyEvent(BaseModel):
+    """Legacy model for data events (scheduled for replacement)."""
 
     id: UUID = Field(default_factory=uuid4)
     event_type: str

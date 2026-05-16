@@ -15,6 +15,7 @@ async def test_event_bus_delivery() -> None:
 
     event = SensorRunStarted(source="test_sensor")
     await bus.publish(event)
+    await bus.wait_until_idle()
 
     assert len(received_events) == 1
     assert received_events[0].event_id == event.event_id
@@ -37,6 +38,7 @@ async def test_event_bus_failure_isolation() -> None:
 
     event = SensorRunStarted(source="test_sensor")
     await bus.publish(event)
+    await bus.wait_until_idle()
 
     # Second handler should still have executed
     assert success_count == 1

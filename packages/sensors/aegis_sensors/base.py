@@ -2,7 +2,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
-from aegis_events.models import Event
+from aegis_events.models import LegacyEvent as Event
 from pydantic import BaseModel
 from tenacity import retry, stop_after_attempt, wait_exponential
 

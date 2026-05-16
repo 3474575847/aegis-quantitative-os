@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from aegis_events.models import Event
+from aegis_events.models import LegacyEvent as Event
 from aegis_observability.logger import get_logger
 
 from aegis_sensors.base import BaseSensor
