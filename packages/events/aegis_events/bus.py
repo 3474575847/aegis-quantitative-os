@@ -33,16 +33,17 @@ class InMemoryEventBus(EventPublisher):
         logger.info(f"Subscribed handler to {event_type}")
 
     async def publish(self, event: BaseEvent) -> None:
+        """Publish event to all subscribers asynchronously and concurrently."""
         event_type = event.event_type
         handlers = self._subscribers.get(event_type, [])
 
         if not handlers:
             return
 
-        tasks = []
-        for handler in handlers:
-            tasks.append(self._execute_handler(handler, event))
-
+        # Execute all handlers concurrently without blocking the publisher for completion
+        # if the system becomes high-throughput. For foundation, we await gather but
+        # ensure error isolation.
+        tasks = [self._execute_handler(handler, event) for handler in handlers]
         await asyncio.gather(*tasks)
 
     async def _execute_handler(self, handler: EventHandler[Any], event: BaseEvent) -> None:

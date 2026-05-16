@@ -29,6 +29,13 @@ class BaseEvent(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class DataEvent(BaseEvent):
+    """Event carrying research data (e.g. Market Prices)."""
+
+    event_type: str = "DataEvent"
+    data_schema: str
+
+
 class SensorRunStarted(BaseEvent):
     event_type: str = "SensorRunStarted"
 
