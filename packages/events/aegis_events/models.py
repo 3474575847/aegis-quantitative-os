@@ -95,6 +95,31 @@ class ResearchArtifactStored(BaseEvent):
     artifact_id: UUID
 
 
+class ResearchWorkflowStarted(BaseEvent):
+    event_type: str = "ResearchWorkflowStarted"
+
+
+class WorkflowStageStarted(BaseEvent):
+    event_type: str = "WorkflowStageStarted"
+
+
+class WorkflowStageCompleted(BaseEvent):
+    event_type: str = "WorkflowStageCompleted"
+
+
+class WorkflowFailed(BaseEvent):
+    event_type: str = "WorkflowFailed"
+    error: str
+
+
+class ResearchArtifactPersisted(BaseEvent):
+    event_type: str = "ResearchArtifactPersisted"
+
+
+class ResearchWorkflowCompleted(BaseEvent):
+    event_type: str = "ResearchWorkflowCompleted"
+
+
 class ErrorClassified(BaseEvent):
     event_type: str = "ErrorClassified"
     severity: str

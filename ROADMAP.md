@@ -58,3 +58,10 @@ This roadmap outlines the phased development of the Aegis-Alpha quantitative res
 - [ ] Multi-asset portfolio simulation.
 - [ ] Market impact and slippage models.
 - [ ] Automated benchmark comparison engine.
+
+## Research Orchestration Evolution
+- [x] Foundational Workflow Orchestrator (State Machine)
+- [x] Research Lineage Tracking (Dependency Graph)
+- [ ] Automated Sensitivity Analysis.
+- [ ] Multi-signal ensemble orchestration.
+- [ ] Direct integration with Autonomous Research Agents.
