@@ -51,3 +51,10 @@ This roadmap outlines the phased development of the Aegis-Alpha quantitative res
 - [ ] Multi-asset factor scoring system.
 - [ ] Cross-sectional signal normalization.
 - [ ] Real-time signal decay monitoring.
+
+## Backtesting Evolution
+- [x] Foundational Backtesting Orchestrator
+- [x] Vectorized Performance Metrics (Sharpe, Drawdown, etc.)
+- [ ] Multi-asset portfolio simulation.
+- [ ] Market impact and slippage models.
+- [ ] Automated benchmark comparison engine.

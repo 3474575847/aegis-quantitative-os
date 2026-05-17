@@ -68,8 +68,31 @@ class SignalPersisted(BaseEvent):
     result_id: UUID
 
 
+class BacktestTriggered(BaseEvent):
+    event_type: str = "BacktestTriggered"
+    backtest_id: UUID
+
+
+class BacktestStarted(BaseEvent):
+    event_type: str = "BacktestStarted"
+
+
+class MetricsComputed(BaseEvent):
+    event_type: str = "MetricsComputed"
+
+
+class BacktestFailed(BaseEvent):
+    event_type: str = "BacktestFailed"
+    error: str
+
+
 class BacktestCompleted(BaseEvent):
     event_type: str = "BacktestCompleted"
+
+
+class ResearchArtifactStored(BaseEvent):
+    event_type: str = "ResearchArtifactStored"
+    artifact_id: UUID
 
 
 class ErrorClassified(BaseEvent):
