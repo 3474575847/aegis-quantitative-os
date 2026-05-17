@@ -29,9 +29,7 @@ async def test_signal_engine_execution() -> None:
 
     definition = SignalDefinition(name="test_signal", version="1.0.0", parameters={"window": 2})
 
-    df = pd.DataFrame(
-        {"price": [10.0, 20.0, 30.0]}, index=pd.date_range("2024-01-01", periods=3)
-    )
+    df = pd.DataFrame({"price": [10.0, 20.0, 30.0]}, index=pd.date_range("2024-01-01", periods=3))
 
     result = await engine.run_signal(
         definition=definition, df=df, correlation_id=uuid4(), source_event_ids=[]
