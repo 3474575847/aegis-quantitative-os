@@ -65,9 +65,7 @@ Integrated telemetry for system health and research quality.
 │   ├── signals/        # Signal & Factor Engine
 │   ├── storage/        # DB Access & Hypertables
 │   ├── events/         # Event Schemas & Bus
-│   ├── observability/  # Metrics & Logging
-│   ├── orchestration/  # Workflow Management
-│   ├── experimentation/ # Experiment Foundation
+│   └── observability/  # Metrics & Logging
 ├── frontend/           # Next.js Command Center
 ├── infrastructure/     # Docker, Terraform, K8s
 └── docs/               # Architecture & Specifications
@@ -93,6 +91,3 @@ Aegis-Alpha includes a deterministic backtesting orchestrator. It uses vectorize
 
 ## Research Orchestration
 Aegis-Alpha employs a state-machine-driven orchestrator to coordinate complex research workflows. It ensures that signals and backtests are executed in the correct deterministic order while maintaining a 100% auditable research lineage.
-
-## Research Experimentation Engine
-Aegis-Alpha features a structured experimentation foundation. It provides the framework for registering research experiments and tracking workflow outcomes with guaranteed reproducibility.
