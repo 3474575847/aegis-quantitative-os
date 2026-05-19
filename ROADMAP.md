@@ -62,6 +62,7 @@ This roadmap outlines the phased development of the Aegis-Alpha quantitative res
 ## Research Orchestration Evolution
 - [x] Foundational Workflow Orchestrator (State Machine)
 - [x] Research Lineage Tracking (Dependency Graph)
+- [x] Research Experimentation Foundation (Phase 1)
 - [ ] Automated Sensitivity Analysis.
 - [ ] Multi-signal ensemble orchestration.
 - [ ] Direct integration with Autonomous Research Agents.

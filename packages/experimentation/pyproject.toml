@@ -1,0 +1,20 @@
+[project]
+name = "aegis-experimentation"
+version = "0.1.0"
+description = "Aegis-Alpha research experimentation foundation"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+
+[dependency-groups]
+dev = [
+    "pytest-asyncio>=1.3.0",
+]
