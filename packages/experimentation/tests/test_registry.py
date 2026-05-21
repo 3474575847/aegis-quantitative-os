@@ -1,29 +1,28 @@
 import uuid
+from collections.abc import AsyncGenerator
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+import pytest_asyncio
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from aegis_experimentation.models import ExperimentStatus
 from aegis_experimentation.registry import ExperimentRegistry
 from aegis_storage.models.base import Base
 
 
-@pytest.fixture
-async def async_session():
+@pytest_asyncio.fixture
+async def async_session() -> AsyncGenerator[AsyncSession, None]:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    async_session_factory = sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
+    async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with async_session_factory() as session:
         yield session
 
 
 @pytest.mark.asyncio
-async def test_experiment_registry_lifecycle(async_session):
+async def test_experiment_registry_lifecycle(async_session: AsyncSession) -> None:
     registry = ExperimentRegistry(async_session)
     experiment_id = uuid.uuid4()
     workflow_ids = [uuid.uuid4()]

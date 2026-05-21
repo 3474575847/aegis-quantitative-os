@@ -1,5 +1,6 @@
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,14 +47,14 @@ class ExperimentRegistry:
         await self.repository.add(record)
         return run
 
-    async def complete_run(self, run_id: uuid.UUID, metadata: dict | None = None) -> None:
+    async def complete_run(self, run_id: uuid.UUID, metadata: dict[str, Any] | None = None) -> None:
         """Mark an experiment run as completed."""
         record = await self.repository.get_by_id(run_id)
         if record:
             record.status = ExperimentStatus.COMPLETED
             record.completed_at = datetime.now(UTC)
             if metadata:
-                record.metadata_json.update(metadata)
+                record.metadata_json = {**record.metadata_json, **metadata}
             await self.repository.session.flush()
 
     async def get_experiment_history(self, experiment_id: uuid.UUID) -> list[ExperimentRun]:
