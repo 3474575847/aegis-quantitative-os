@@ -2,6 +2,11 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from aegis_storage.models.experimentation import (
+    ExperimentDefinitionRecord,
+    ExperimentRunRecord,
+)
+from aegis_storage.repositories.experimentation import ExperimentRepository
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from aegis_experimentation.models import (
@@ -9,8 +14,6 @@ from aegis_experimentation.models import (
     ExperimentRun,
     ExperimentStatus,
 )
-from aegis_storage.models.experimentation import ExperimentRunRecord
-from aegis_storage.repositories.experimentation import ExperimentRepository
 
 
 class ExperimentRegistry:
@@ -23,6 +26,17 @@ class ExperimentRegistry:
         self, definition: ExperimentDefinition
     ) -> ExperimentDefinition:
         """Register a new experiment definition."""
+        record = ExperimentDefinitionRecord(
+            experiment_id=definition.experiment_id,
+            name=definition.name,
+            description=definition.description,
+            workflow_ids=definition.workflow_ids,
+            parameters=definition.parameters,
+            metadata_json=definition.metadata,
+            tags=definition.tags,
+            created_at=definition.created_at,
+        )
+        await self.repository.add_definition(record)
         return definition
 
     async def create_run(
@@ -47,17 +61,24 @@ class ExperimentRegistry:
         await self.repository.add(record)
         return run
 
-    async def complete_run(self, run_id: uuid.UUID, metadata: dict[str, Any] | None = None) -> None:
+    async def complete_run(
+        self, run_id: uuid.UUID, metadata: dict[str, Any] | None = None
+    ) -> None:
         """Mark an experiment run as completed."""
         record = await self.repository.get_by_id(run_id)
         if record:
             record.status = ExperimentStatus.COMPLETED
             record.completed_at = datetime.now(UTC)
             if metadata:
-                record.metadata_json = {**record.metadata_json, **metadata}
+                # Trigger dirty tracking by reassignment
+                new_metadata = dict(record.metadata_json)
+                new_metadata.update(metadata)
+                record.metadata_json = new_metadata
             await self.repository.session.flush()
 
-    async def get_experiment_history(self, experiment_id: uuid.UUID) -> list[ExperimentRun]:
+    async def get_experiment_history(
+        self, experiment_id: uuid.UUID
+    ) -> list[ExperimentRun]:
         """Retrieve historical runs for a specific experiment."""
         records = await self.repository.get_runs_by_experiment(experiment_id)
         return [

@@ -68,56 +68,8 @@ class SignalPersisted(BaseEvent):
     result_id: UUID
 
 
-class BacktestTriggered(BaseEvent):
-    event_type: str = "BacktestTriggered"
-    backtest_id: UUID
-
-
-class BacktestStarted(BaseEvent):
-    event_type: str = "BacktestStarted"
-
-
-class MetricsComputed(BaseEvent):
-    event_type: str = "MetricsComputed"
-
-
-class BacktestFailed(BaseEvent):
-    event_type: str = "BacktestFailed"
-    error: str
-
-
 class BacktestCompleted(BaseEvent):
     event_type: str = "BacktestCompleted"
-
-
-class ResearchArtifactStored(BaseEvent):
-    event_type: str = "ResearchArtifactStored"
-    artifact_id: UUID
-
-
-class ResearchWorkflowStarted(BaseEvent):
-    event_type: str = "ResearchWorkflowStarted"
-
-
-class WorkflowStageStarted(BaseEvent):
-    event_type: str = "WorkflowStageStarted"
-
-
-class WorkflowStageCompleted(BaseEvent):
-    event_type: str = "WorkflowStageCompleted"
-
-
-class WorkflowFailed(BaseEvent):
-    event_type: str = "WorkflowFailed"
-    error: str
-
-
-class ResearchArtifactPersisted(BaseEvent):
-    event_type: str = "ResearchArtifactPersisted"
-
-
-class ResearchWorkflowCompleted(BaseEvent):
-    event_type: str = "ResearchWorkflowCompleted"
 
 
 class ErrorClassified(BaseEvent):

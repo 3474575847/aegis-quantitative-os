@@ -2,21 +2,25 @@ import uuid
 from collections.abc import AsyncGenerator
 
 import pytest
-import pytest_asyncio
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from aegis_experimentation.models import ExperimentStatus
 from aegis_experimentation.registry import ExperimentRegistry
 from aegis_storage.models.base import Base
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 
-@pytest_asyncio.fixture
+@pytest.fixture
 async def async_session() -> AsyncGenerator[AsyncSession, None]:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async_session_factory = async_sessionmaker(
+        engine, expire_on_commit=False
+    )
     async with async_session_factory() as session:
         yield session
 

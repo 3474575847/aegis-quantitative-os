@@ -34,11 +34,6 @@ async def main() -> None:
     event_bus.subscribe("SensorRunStarted", persistence_handler.handle)
     event_bus.subscribe("SensorRunCompleted", persistence_handler.handle)
     event_bus.subscribe("SensorFailed", persistence_handler.handle)
-    event_bus.subscribe("SignalGenerationTriggered", persistence_handler.handle)
-    event_bus.subscribe("SignalComputed", persistence_handler.handle)
-    event_bus.subscribe("SignalPersisted", persistence_handler.handle)
-    event_bus.subscribe("BacktestStarted", persistence_handler.handle)
-    event_bus.subscribe("BacktestCompleted", persistence_handler.handle)
 
     mock_path = Path("packages/sensors/tests/fixtures/market_prices.json").resolve()
     config = SensorConfig(
@@ -54,7 +49,14 @@ async def main() -> None:
         while True:
             try:
                 logger.info("Executing Ingestion Cycle")
+                # SensorRunner handles execution and event emission for system events
+                # and internal data events (once fully migrated).
                 await runner.run_once()
+
+                # Note: Currently data persistence is still handled inside sensors/runner
+                # or manually here if they return values. MarketPriceSensor returns events.
+                # Migration to DataEvents is scheduled for the next pass.
+
                 logger.info("Ingestion cycle complete")
             except Exception as e:
                 logger.error(f"Ingestion cycle failed: {e}")

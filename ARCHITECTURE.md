@@ -85,12 +85,3 @@ The `EventPublisher` interface allows for future migration to distributed broker
 
 ## Signal Engine
 Aegis-Alpha employs a deterministic, event-driven signal engine for quantitative research. It uses vectorized rolling analytics to maintain performance and consistency between live research and historical backtesting.
-
-## Backtesting Engine
-Aegis-Alpha includes a deterministic backtesting orchestrator. It uses vectorized performance computation to transform signal outputs into verifiable research artifacts, maintaining a complete lineage from raw data to Sharpe ratio.
-
-## Research Orchestration
-
-## Research Experimentation Engine
-Aegis-Alpha features a structured experimentation foundation. It provides the framework for registering research experiments and tracking workflow outcomes with guaranteed reproducibility.
-Aegis-Alpha employs a state-machine-driven orchestrator to coordinate complex research workflows. It ensures that signals and backtests are executed in the correct deterministic order while maintaining a 100% auditable research lineage.
