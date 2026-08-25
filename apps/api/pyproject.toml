@@ -7,6 +7,12 @@ dependencies = [
     "aegis-core",
     "aegis-events",
     "aegis-observability",
+    "aegis-storage",
+    "aegis-signals",
+    "aegis-experimentation",
+    "fastapi>=0.115.0",
+    "httpx",
+    "uvicorn>=0.30.0",
 ]
 
 [build-system]
@@ -17,3 +23,6 @@ build-backend = "hatchling.build"
 aegis-core = { workspace = true }
 aegis-events = { workspace = true }
 aegis-observability = { workspace = true }
+aegis-storage = { workspace = true }
+aegis-signals = { workspace = true }
+aegis-experimentation = { workspace = true }

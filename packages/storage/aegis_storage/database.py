@@ -20,6 +20,12 @@ class DatabaseManager:
             try:
                 yield session
                 await session.commit()
+            except GeneratorExit:
+                try:
+                    await session.commit()
+                except Exception:
+                    await session.rollback()
+                raise
             except Exception:
                 await session.rollback()
                 raise

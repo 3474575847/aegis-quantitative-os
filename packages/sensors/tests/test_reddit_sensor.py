@@ -17,3 +17,6 @@ async def test_reddit_sensor_mock_mode() -> None:
     assert events[0].event_type == "REDDIT_POST"
     assert events[0].data["title"] == "GME to the moon!"
     assert events[1].data["author"] == "bear_market"
+    # occurred_at must preserve the original Reddit publication timestamp (created_utc=1715560000),
+    # NOT the current wall-clock time. This verifies point-in-time correctness.
+    assert events[0].occurred_at.isoformat() == "2024-05-13T00:26:40+00:00"

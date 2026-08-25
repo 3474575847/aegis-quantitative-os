@@ -31,8 +31,22 @@ class SensorRunner:
             SENSOR_LATENCY.labels(sensor_id=sensor_id).observe(duration)
             EVENTS_PROCESSED.labels(sensor_id=sensor_id).inc(len(events))
 
-            if self.publisher:
-                await self.publisher.publish(SensorRunCompleted(source=sensor_id))
+            if self.publisher and len(events) > 0:
+                event_dicts = [
+                    {
+                        "event_id": str(getattr(e, "id", "")),
+                        "event_type": getattr(e, "event_type", "EVENT"),
+                        "data": getattr(e, "data", {}),
+                        "occurred_at": str(getattr(e, "occurred_at", "")),
+                    }
+                    for e in events
+                ]
+                await self.publisher.publish(
+                    SensorRunCompleted(
+                        source=sensor_id,
+                        payload={"events_count": len(events), "events": event_dicts},
+                    )
+                )
         except Exception as e:
             SENSOR_ERRORS.labels(sensor_id=sensor_id).inc()
             if self.publisher:

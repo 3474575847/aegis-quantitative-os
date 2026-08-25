@@ -52,6 +52,7 @@ class SignalPipelineEngine:
         df: pd.DataFrame,
         correlation_id: UUID,
         source_event_ids: list[UUID],
+        metadata: dict[str, Any] | None = None,
     ) -> SignalResult | None:
         """Execute a single signal computation cycle with persistence and events."""
         start_time = time.perf_counter()
@@ -91,6 +92,12 @@ class SignalPipelineEngine:
                 signal_id=definition.signal_id,
                 timestamp=latest_timestamp,
                 value=latest_value,
+                metadata={
+                    **(metadata or {}),
+                    "signal_name": definition.name,
+                    "signal_version": definition.version,
+                    "source_event_ids": [str(event_id) for event_id in source_event_ids],
+                },
             )
 
             duration = time.perf_counter() - start_time

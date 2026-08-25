@@ -16,21 +16,27 @@ services:
 
   api:
     build:
-      context: .
+      context: ..
       dockerfile: apps/api/Dockerfile
     depends_on:
       - db
       - redis
+    env_file:
+      - ../.env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/aegis
     ports:
       - "8000:8000"
 
   worker:
     build:
-      context: .
+      context: ..
       dockerfile: apps/worker/Dockerfile
     depends_on:
       - db
       - redis
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/aegis
 
 volumes:
   pgdata:

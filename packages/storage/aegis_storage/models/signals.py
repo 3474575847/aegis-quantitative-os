@@ -2,9 +2,9 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from aegis_storage.models.base import Base
+from aegis_storage.models.base import Base, SQLiteCompatibleJSONB
 from sqlalchemy import DateTime, Float, Index, String
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -20,7 +20,7 @@ class SignalResultRecord(Base):
     )
     value: Mapped[float] = mapped_column(Float, nullable=False)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, name="metadata", nullable=False, default=dict
+        SQLiteCompatibleJSONB, name="metadata", nullable=False, default=dict
     )
 
     __table_args__ = (
@@ -38,6 +38,6 @@ class SignalDefinitionRecord(Base):
 
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     version: Mapped[str] = mapped_column(String(50), nullable=False)
-    parameters: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    parameters: Mapped[dict[str, Any]] = mapped_column(SQLiteCompatibleJSONB, nullable=False)
 
     __table_args__ = (Index("idx_signal_definitions_name_version", "name", "version", unique=True),)
