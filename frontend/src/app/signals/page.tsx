@@ -42,6 +42,7 @@ export default function SignalsPage() {
   const [activeQuote, setActiveQuote] = useState<TickerQuote | null>(null);
   const [tickerHistory, setTickerHistory] = useState<ChartDatapoint[]>([]);
   const [quoteLoading, setQuoteLoading] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSignals();
@@ -53,6 +54,7 @@ export default function SignalsPage() {
   const fetchSignals = async () => {
     try {
       setLoading(true);
+      setApiError(null);
       const res = await fetch("http://localhost:8000/api/signals");
       if (res.ok) {
         const data = await res.json();
@@ -60,8 +62,11 @@ export default function SignalsPage() {
         if (data.length > 0) {
           selectSignal(data[0]);
         }
+      } else {
+        setApiError(`Signal catalog returned ${res.status}`);
       }
     } catch (e) {
+      setApiError("Cannot reach API — check that the backend is running on port 8000.");
       console.error("Error fetching signals", e);
     } finally {
       setLoading(false);
@@ -115,8 +120,9 @@ export default function SignalsPage() {
         setTickerHistory(hData.datapoints || []);
       }
     } catch (e) {
+      setApiError("Market quote fetch failed — API may be temporarily unavailable.");
       console.error("Error fetching asset quote or history", e);
-      // Show stale data rather than crash — quote stays set, history stays set
+      // Keep stale data visible rather than clearing it
     } finally {
       setQuoteLoading(false);
     }
@@ -138,6 +144,32 @@ export default function SignalsPage() {
           Refresh Factors
         </button>
       </div>
+
+      {/* API error banner — shown when the backend is unreachable */}
+      {apiError && (
+        <div
+          style={{
+            padding: "10px 16px",
+            backgroundColor: "rgba(239, 68, 68, 0.1)",
+            border: "1px solid var(--accent-red)",
+            borderRadius: "6px",
+            fontSize: "13px",
+            color: "var(--accent-amber)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <span>⚠ {apiError}</span>
+          <button
+            className="btn btn-secondary"
+            onClick={() => { setApiError(null); fetchSignals(); }}
+            style={{ fontSize: "11px", padding: "3px 8px" }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* UI/UX Pro Max Asset Inspector & Ticker Bar */}
       <div

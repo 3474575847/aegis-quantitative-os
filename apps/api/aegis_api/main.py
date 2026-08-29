@@ -3,7 +3,30 @@ import os
 import time
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
+
+# Automatically discover and load .env file from repository root
+def _load_env_file() -> None:
+    search_dirs = [Path.cwd(), Path(__file__).resolve().parent, Path(__file__).resolve().parents[3]]
+    for directory in search_dirs:
+        env_file = directory / ".env"
+        if env_file.is_file():
+            try:
+                with env_file.open() as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            key = k.strip()
+                            val = v.strip().strip("'\"")
+                            if key not in os.environ:
+                                os.environ[key] = val
+                break
+            except Exception:
+                pass
+
+_load_env_file()
 
 import httpx
 import pandas as pd

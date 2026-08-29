@@ -28,7 +28,7 @@ export default function RootLayout({
                 <span>📡</span>
                 <span>Signal Engine</span>
               </Link>
-              <Link href="/companies/AAPL" className="nav-item">
+              <Link href="/companies" className="nav-item">
                 <span>🏢</span>
                 <span>Companies</span>
               </Link>

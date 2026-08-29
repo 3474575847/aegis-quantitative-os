@@ -17,7 +17,7 @@ interface ExperimentSummary {
   success_rate: number;
   latest_status: string;
   latest_run_id: string | null;
-  best_sharpe: number | null;
+  best_sharpe: number | null | undefined;
 }
 
 interface RunRecord {
@@ -427,14 +427,14 @@ export default function ExperimentsPage() {
                           style={{
                             fontWeight: "600",
                             color:
-                              exp.best_sharpe && exp.best_sharpe >= 1.0
+                              exp.best_sharpe != null && exp.best_sharpe >= 1.0
                                 ? "var(--accent-green)"
-                                : exp.best_sharpe && exp.best_sharpe >= 0
+                                : exp.best_sharpe != null && exp.best_sharpe >= 0
                                 ? "var(--accent-cyan)"
                                 : "var(--text-muted)",
                           }}
                         >
-                          {exp.best_sharpe !== null ? exp.best_sharpe.toFixed(3) : "—"}
+                        {exp.best_sharpe != null ? exp.best_sharpe.toFixed(3) : "—"}
                         </span>
                       </td>
                       <td>

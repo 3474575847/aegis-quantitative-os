@@ -17,12 +17,14 @@ interface BacktestResult {
   final_equity: number;
   total_return: number;
   annualized_volatility: number;
-  cagr: number;
+  // cagr, sortino, calmar were added in a recent engine update.
+  // Mark optional so old-format responses (pre-rebuild) don't crash.
+  cagr?: number;
   sharpe: number;
-  sortino: number;
+  sortino?: number;
   max_drawdown: number;
-  calmar: number;
-  win_rate: number;
+  calmar?: number;
+  win_rate?: number;
   turnover: number;
   transaction_cost_bps: number;
   slippage_bps: number;
@@ -280,7 +282,7 @@ export default function ResearchPage() {
               <div className="card">
                 <span className="card-title">Sortino Ratio</span>
                 <strong className="card-value" style={{ fontSize: "22px", color: "var(--accent-cyan)" }}>
-                  {result.sortino.toFixed(3)}
+                  {result.sortino != null ? result.sortino.toFixed(3) : "—"}
                 </strong>
                 <span className="card-subtitle">Downside deviation</span>
               </div>
@@ -291,10 +293,10 @@ export default function ResearchPage() {
                   className="card-value"
                   style={{
                     fontSize: "22px",
-                    color: result.cagr >= 0 ? "var(--accent-green)" : "var(--accent-red)",
+                    color: (result.cagr ?? 0) >= 0 ? "var(--accent-green)" : "var(--accent-red)",
                   }}
                 >
-                  {(result.cagr * 100).toFixed(2)}%
+                  {result.cagr != null ? `${(result.cagr * 100).toFixed(2)}%` : "—"}
                 </strong>
                 <span className="card-subtitle">Annualized growth</span>
               </div>
@@ -310,7 +312,7 @@ export default function ResearchPage() {
               <div className="card">
                 <span className="card-title">Calmar Ratio</span>
                 <strong className="card-value" style={{ fontSize: "20px" }}>
-                  {result.calmar.toFixed(2)}
+                  {result.calmar != null ? result.calmar.toFixed(2) : "—"}
                 </strong>
                 <span className="card-subtitle">CAGR / |Max Drawdown|</span>
               </div>
@@ -318,7 +320,7 @@ export default function ResearchPage() {
               <div className="card">
                 <span className="card-title">Win Rate</span>
                 <strong className="card-value" style={{ fontSize: "20px" }}>
-                  {(result.win_rate * 100).toFixed(1)}%
+                  {result.win_rate != null ? `${(result.win_rate * 100).toFixed(1)}%` : "—"}
                 </strong>
                 <span className="card-subtitle">Active bar periods</span>
               </div>
