@@ -62,6 +62,13 @@ export default function DrawingOverlayCanvas({
   const [startPoint, setStartPoint] = React.useState<ChartPoint | null>(null);
   const [currentMousePoint, setCurrentMousePoint] = React.useState<ChartPoint | null>(null);
 
+  // Dragging existing drawing/measurement endpoint
+  const [dragTarget, setDragTarget] = React.useState<{
+    type: 'drawing' | 'measurement';
+    id: string;
+    pointIndex: number;
+  } | null>(null);
+
   // Hover card state for signals/events/backtests
   const [hoverCard, setHoverCard] = React.useState<{
     x: number;
@@ -69,6 +76,19 @@ export default function DrawingOverlayCanvas({
     title: string;
     items: Array<{ label: string; value: string }>;
   } | null>(null);
+
+  // Keyboard shortcut listener (Escape to cancel tool, Delete to clear selected)
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setStartPoint(null);
+        setCurrentMousePoint(null);
+        setDragTarget(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Redraw canvas on dependencies
   React.useEffect(() => {
@@ -199,7 +219,7 @@ export default function DrawingOverlayCanvas({
         for (const sig of signals) {
           const t = Math.floor(Date.parse(sig.market_timestamp) / 1000);
           const sx = timeToX(t);
-          if (sx !== null && Math.abs(sx - x) < 12) {
+          if (sx !== null && Math.abs(sx - x) < 14) {
             hitCard = {
               x: sx,
               y: y - 10,
@@ -220,7 +240,7 @@ export default function DrawingOverlayCanvas({
         for (const evt of events) {
           const t = typeof evt.timestamp === 'number' ? evt.timestamp : Math.floor(Date.parse(evt.timestamp) / 1000);
           const ex = timeToX(t);
-          if (ex !== null && Math.abs(ex - x) < 12) {
+          if (ex !== null && Math.abs(ex - x) < 14) {
             hitCard = {
               x: ex,
               y: y - 10,
@@ -236,12 +256,44 @@ export default function DrawingOverlayCanvas({
         }
       }
 
+      if (!hitCard && showBacktests) {
+        for (const bt of backtests) {
+          const t1 = typeof bt.entryTimestamp === 'number' ? bt.entryTimestamp : Math.floor(Date.parse(bt.entryTimestamp) / 1000);
+          const bx = timeToX(t1);
+          if (bx !== null && Math.abs(bx - x) < 14) {
+            hitCard = {
+              x: bx,
+              y: y - 10,
+              title: `BACKTEST TRADE: ${bt.direction}`,
+              items: [
+                { label: 'Entry Price', value: `$${formatFigure(bt.entryPrice)}` },
+                { label: 'Exit Price', value: bt.exitPrice != null ? `$${formatFigure(bt.exitPrice)}` : 'Open' },
+                { label: 'Return', value: bt.returnPct != null ? formatPercent(bt.returnPct) : 'N/A' },
+                { label: 'Holding', value: bt.holdingPeriodDays ? `${bt.holdingPeriodDays} days` : 'N/A' },
+              ],
+            };
+            break;
+          }
+        }
+      }
+
       setHoverCard(hitCard);
     }
   };
 
+  const isCursorMode = activeDrawingTool === 'cursor';
+
   return (
-    <div style={{ position: 'absolute', top: 0, left: 0, width, height, pointerEvents: 'auto' }}>
+    <div
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width,
+        height,
+        pointerEvents: isCursorMode ? 'none' : 'auto',
+      }}
+    >
       <canvas
         ref={canvasRef}
         width={width}

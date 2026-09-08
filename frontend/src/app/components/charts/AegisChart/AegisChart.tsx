@@ -2,6 +2,9 @@
 
 import React from 'react';
 import {
+  AreaSeries,
+  BarSeries,
+  CandlestickSeries,
   ColorType,
   createChart,
   CrosshairMode,
@@ -150,18 +153,36 @@ export default function AegisChart({
       series = chart.addSeries(LineSeries, { color: '#00e5ff', lineWidth: 2 });
       series.setData(candles.map((c) => ({ time: c.time as UTCTimestamp, value: c.close })));
     } else if (chartState.chartType === 'area') {
-      series = chart.addSeries(LineSeries, { color: '#00e5ff', lineWidth: 2 });
+      series = chart.addSeries(AreaSeries, {
+        lineColor: '#00e5ff',
+        topColor: 'rgba(0, 229, 255, 0.35)',
+        bottomColor: 'rgba(0, 229, 255, 0.02)',
+        lineWidth: 2,
+      });
       series.setData(candles.map((c) => ({ time: c.time as UTCTimestamp, value: c.close })));
+    } else if (chartState.chartType === 'ohlc') {
+      series = chart.addSeries(BarSeries, {
+        upColor: '#10b981',
+        downColor: '#f43f5e',
+      });
+      series.setData(
+        candles.map((c) => ({
+          time: c.time as UTCTimestamp,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+        }))
+      );
     } else {
-      series = chart.addSeries({
-        type: 'Candlestick',
+      series = chart.addSeries(CandlestickSeries, {
         upColor: '#10b981',
         downColor: '#f43f5e',
         borderUpColor: '#10b981',
         borderDownColor: '#f43f5e',
         wickUpColor: '#10b981',
         wickDownColor: '#f43f5e',
-      } as never);
+      });
       series.setData(
         candles.map((c) => ({
           time: c.time as UTCTimestamp,
@@ -178,9 +199,9 @@ export default function AegisChart({
     if (chartState.showVolume) {
       const volumeSeries = chart.addSeries(HistogramSeries, {
         priceFormat: { type: 'volume' },
-        priceScaleId: '',
+        priceScaleId: 'volume',
       });
-      volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+      volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
       volumeSeries.setData(
         candles.map((c) => ({
           time: c.time as UTCTimestamp,
@@ -219,16 +240,33 @@ export default function AegisChart({
       l.setData(lower.map((d) => ({ time: d.time as UTCTimestamp, value: d.value })));
     }
 
-    // Render Separate Panes (RSI, MACD, ATR, Momentum, Stochastic)
+    // Render Separate Panes (RSI, MACD, ATR, Momentum, Stochastic) with isolated priceScaleId
     if (chartState.indicators.rsi.enabled) {
       const rsiData = calculateRSI(candles, chartState.indicators.rsi.params.period ?? 14);
-      const rsiSeries = chart.addSeries(LineSeries, { color: '#00e5ff', lineWidth: 2, title: 'RSI 14' });
+      const rsiSeries = chart.addSeries(LineSeries, {
+        color: '#00e5ff',
+        lineWidth: 2,
+        title: 'RSI 14',
+        priceScaleId: 'rsi',
+      });
+      rsiSeries.priceScale().applyOptions({ scaleMargins: { top: 0.7, bottom: 0.05 } });
       rsiSeries.setData(rsiData.map((d) => ({ time: d.time as UTCTimestamp, value: d.value })));
     }
     if (chartState.indicators.macd.enabled) {
       const { macdLine, signalLine } = calculateMACD(candles);
-      const mSeries = chart.addSeries(LineSeries, { color: '#00e5ff', lineWidth: 2, title: 'MACD' });
-      const sSeries = chart.addSeries(LineSeries, { color: '#f59e0b', lineWidth: 2, title: 'Signal' });
+      const mSeries = chart.addSeries(LineSeries, {
+        color: '#00e5ff',
+        lineWidth: 2,
+        title: 'MACD',
+        priceScaleId: 'macd',
+      });
+      const sSeries = chart.addSeries(LineSeries, {
+        color: '#f59e0b',
+        lineWidth: 2,
+        title: 'Signal',
+        priceScaleId: 'macd',
+      });
+      mSeries.priceScale().applyOptions({ scaleMargins: { top: 0.75, bottom: 0.05 } });
       mSeries.setData(macdLine.map((d) => ({ time: d.time as UTCTimestamp, value: d.value })));
       sSeries.setData(signalLine.map((d) => ({ time: d.time as UTCTimestamp, value: d.value })));
     }
