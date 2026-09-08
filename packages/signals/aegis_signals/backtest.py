@@ -12,7 +12,7 @@ def _sortino(returns: pd.Series, annualization: float) -> float:
     if len(returns) < 2:
         return 0.0
     downside_diff = returns.clip(upper=0.0)
-    downside_sq_sum = float((downside_diff ** 2).sum())
+    downside_sq_sum = float((downside_diff**2).sum())
     if downside_sq_sum <= 0.0:
         # No negative returns in sample
         return 0.0
@@ -20,7 +20,7 @@ def _sortino(returns: pd.Series, annualization: float) -> float:
     downside_dev = (downside_sq_sum / (len(returns) - 1)) ** 0.5
     if downside_dev == 0.0:
         return 0.0
-    return float((returns.mean() / downside_dev) * (annualization ** 0.5))
+    return float((returns.mean() / downside_dev) * (annualization**0.5))
 
 
 def _cagr(equity_curve: pd.Series, annualization: float) -> float:
@@ -84,9 +84,7 @@ def run_signal_backtest(
     if len(frame) < 2 or (frame["price"] <= 0).any():
         raise ValueError("Backtest requires at least two positive aligned prices")
 
-    raw_positions = frame["signal"].map(
-        lambda v: 1.0 if v > 0 else -1.0 if v < 0 else 0.0
-    )
+    raw_positions = frame["signal"].map(lambda v: 1.0 if v > 0 else -1.0 if v < 0 else 0.0)
     positions: list[float] = []
     remaining = 0
     held_position = 0.0
@@ -101,8 +99,7 @@ def run_signal_backtest(
     frame["position_change"] = frame["position"].diff().abs().fillna(frame["position"].abs())
     total_cost = (transaction_cost_bps + slippage_bps) / 10_000
     frame["strategy_return"] = (
-        frame["position"] * frame["market_return"]
-        - frame["position_change"] * total_cost
+        frame["position"] * frame["market_return"] - frame["position_change"] * total_cost
     )
     returns = frame["strategy_return"].dropna()
     if returns.empty:

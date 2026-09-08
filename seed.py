@@ -105,9 +105,7 @@ async def main() -> None:
             # Add a couple of runs
             for i in range(3):
                 status = statuses[i % len(statuses)]
-                started = datetime.now(UTC) - timedelta(
-                    days=3 - i, hours=random.randint(1, 10)
-                )
+                started = datetime.now(UTC) - timedelta(days=3 - i, hours=random.randint(1, 10))
                 completed = (
                     started + timedelta(minutes=random.randint(5, 45))
                     if status in ["COMPLETED", "FAILED"]

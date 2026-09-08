@@ -19,6 +19,7 @@ from aegis_signals.backtest import _cagr, _calmar, _sortino, run_signal_backtest
 # Helper factories
 # ---------------------------------------------------------------------------
 
+
 def _prices(values: list[float], freq: str = "h") -> pd.Series:
     return pd.Series(values, index=pd.date_range("2026-01-01", periods=len(values), freq=freq))
 
@@ -30,6 +31,7 @@ def _signals(values: list[float], freq: str = "h") -> pd.Series:
 # ---------------------------------------------------------------------------
 # Execution model
 # ---------------------------------------------------------------------------
+
 
 class TestExecutionModel:
     def test_next_bar_execution_label(self) -> None:
@@ -159,6 +161,7 @@ class TestResearchConfiguration:
 # Sharpe
 # ---------------------------------------------------------------------------
 
+
 class TestSharpe:
     def test_sharpe_is_zero_when_zero_position(self) -> None:
         # Zero signal → zero position → zero strategy returns → std = 0 → sharpe = 0
@@ -177,6 +180,7 @@ class TestSharpe:
 # ---------------------------------------------------------------------------
 # Sortino
 # ---------------------------------------------------------------------------
+
 
 class TestSortino:
     def test_sortino_is_zero_when_no_downside(self) -> None:
@@ -215,6 +219,7 @@ class TestSortino:
 # CAGR
 # ---------------------------------------------------------------------------
 
+
 class TestCAGR:
     def test_cagr_direct_doubling(self) -> None:
         """Equity doubles over 252 periods → CAGR ≈ 100%."""
@@ -245,6 +250,7 @@ class TestCAGR:
 # ---------------------------------------------------------------------------
 # Calmar
 # ---------------------------------------------------------------------------
+
 
 class TestCalmar:
     def test_calmar_is_zero_when_no_drawdown(self) -> None:
@@ -279,6 +285,7 @@ class TestCalmar:
 # Max drawdown
 # ---------------------------------------------------------------------------
 
+
 class TestMaxDrawdown:
     def test_drawdown_is_non_positive(self) -> None:
         result = run_signal_backtest(
@@ -299,6 +306,7 @@ class TestMaxDrawdown:
 # ---------------------------------------------------------------------------
 # Equity curve
 # ---------------------------------------------------------------------------
+
 
 class TestEquityCurve:
     def test_equity_curve_length_matches_observations(self) -> None:

@@ -169,9 +169,7 @@ class ArticleDeduplicationEngine:
                 for a in cluster
                 if a.provider_sentiment_score is not None
             ]
-            aegis_sentiment = (
-                round(sum(sentiments) / len(sentiments), 4) if sentiments else 0.0
-            )
+            aegis_sentiment = round(sum(sentiments) / len(sentiments), 4) if sentiments else 0.0
 
             # Corroboration score: function of independent publishers (not provider repeat counts)
             independent_count = len(publishers)

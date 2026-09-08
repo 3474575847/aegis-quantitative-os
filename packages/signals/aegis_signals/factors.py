@@ -61,9 +61,7 @@ class FactorEngine:
         "volume_surprise": volume_surprise,
         "sma_deviation": sma_deviation,
         "rsi": rsi,
-        "sentiment_z": lambda frame, _window: pd.to_numeric(
-            frame["sentiment_z"], errors="coerce"
-        ),
+        "sentiment_z": lambda frame, _window: pd.to_numeric(frame["sentiment_z"], errors="coerce"),
     }
 
     def __init__(self, factors: dict[str, float], windows: dict[str, int] | None = None) -> None:

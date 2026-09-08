@@ -22,6 +22,7 @@ from fastapi.testclient import TestClient
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _live_quote(symbol: str, price: float) -> MarketTickerResponse:
     return MarketTickerResponse(
         symbol=symbol,
@@ -51,6 +52,7 @@ def _fallback_quote(symbol: str, price: float, reason: str) -> MarketTickerRespo
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 class TestPortfolioScenarioValidation:
     """Input validation — these must be rejected before any quote fetch."""
@@ -185,6 +187,7 @@ class TestPortfolioScenarioCalculation:
         BTC:  weight=0.5, shock=+20% → contribution = +0.10
         Total weighted_shock = +0.05
         """
+
         async def mock_get_ticker(symbol: str) -> MarketTickerResponse:
             return _live_quote(symbol.upper(), 100.0)
 
@@ -222,6 +225,7 @@ class TestPortfolioScenarioCalculation:
 
     def test_single_asset_full_weight(self) -> None:
         """One asset, weight=1.0, shock=-30% → weighted_shock=-0.30"""
+
         async def mock_get_ticker(symbol: str) -> MarketTickerResponse:
             return _live_quote(symbol.upper(), 500.0)
 
@@ -239,6 +243,7 @@ class TestPortfolioScenarioCalculation:
 
     def test_shock_for_unknown_symbol_is_zero(self) -> None:
         """Shocks for symbols not in holdings are silently ignored."""
+
         async def mock_get_ticker(symbol: str) -> MarketTickerResponse:
             return _live_quote(symbol.upper(), 100.0)
 

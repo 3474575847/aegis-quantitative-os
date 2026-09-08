@@ -25,6 +25,7 @@ from aegis_storage.models.news import (
 # Helpers — lightweight DB record builders
 # ---------------------------------------------------------------------------
 
+
 def _canonical(
     cluster_id: str,
     headline: str,
@@ -82,6 +83,7 @@ def _raw_article(
 async def _seed_db(records: list[Any]) -> None:
     """Insert ORM records directly via the patched db_manager."""
     import aegis_api.main as m
+
     async for session in m.db_manager.get_session():
         session.add_all(records)
 
@@ -89,6 +91,7 @@ async def _seed_db(records: list[Any]) -> None:
 # ---------------------------------------------------------------------------
 # GET /api/news/latest
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 class TestGetLatestNews:
@@ -119,9 +122,17 @@ class TestGetLatestNews:
         article = resp.json()[0]
 
         required_fields = {
-            "cluster_id", "primary_headline", "primary_url", "primary_publisher",
-            "publisher_count", "first_published_at", "first_available_at",
-            "corroboration_score", "entities", "sentiment_polarity", "member_article_ids",
+            "cluster_id",
+            "primary_headline",
+            "primary_url",
+            "primary_publisher",
+            "publisher_count",
+            "first_published_at",
+            "first_available_at",
+            "corroboration_score",
+            "entities",
+            "sentiment_polarity",
+            "member_article_ids",
         }
         assert required_fields.issubset(article.keys())
 
@@ -162,6 +173,7 @@ class TestGetLatestNews:
 # ---------------------------------------------------------------------------
 # GET /api/news/symbol/{symbol}
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 class TestGetNewsBySymbol:
@@ -216,6 +228,7 @@ class TestGetNewsBySymbol:
 # GET /api/news/cluster/{cluster_id}
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 class TestGetNewsCluster:
     async def test_not_found_returns_404(self, async_client: Any) -> None:
@@ -260,8 +273,15 @@ class TestGetNewsCluster:
         assert resp.status_code == 200
         raw_article = resp.json()["raw_articles"][0]
         required_fields = {
-            "id", "provider_id", "headline", "url", "publisher",
-            "published_at", "available_at", "entities", "provenance",
+            "id",
+            "provider_id",
+            "headline",
+            "url",
+            "publisher",
+            "published_at",
+            "available_at",
+            "entities",
+            "provenance",
         }
         assert required_fields.issubset(raw_article.keys())
 

@@ -59,9 +59,7 @@ class MacroPipeline:
             new_rows = await repo.upsert_observations(records)
 
         elapsed = (datetime.now(UTC) - start).total_seconds()
-        logger.info(
-            "MacroPipeline: cycle complete — %d new rows in %.1fs", new_rows, elapsed
-        )
+        logger.info("MacroPipeline: cycle complete — %d new rows in %.1fs", new_rows, elapsed)
         return {"fetched": len(observations), "new_rows": new_rows}
 
 

@@ -19,9 +19,7 @@ class MacroRepository:
     # Writes
     # ------------------------------------------------------------------
 
-    async def upsert_observations(
-        self, records: list[MacroObservationRecord]
-    ) -> int:
+    async def upsert_observations(self, records: list[MacroObservationRecord]) -> int:
         """
         Insert new observations; skip rows that already exist for the same
         (series_id, observation_date) pair — older retrievals are never
@@ -36,13 +34,17 @@ class MacroRepository:
         for rec in records:
             # Check if this (series_id, observation_date) already exists
             existing = (
-                await self.session.execute(
-                    select(MacroObservationRecord).where(
-                        MacroObservationRecord.series_id == rec.series_id,
-                        MacroObservationRecord.observation_date == rec.observation_date,
+                (
+                    await self.session.execute(
+                        select(MacroObservationRecord).where(
+                            MacroObservationRecord.series_id == rec.series_id,
+                            MacroObservationRecord.observation_date == rec.observation_date,
+                        )
                     )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
 
             if existing is None:
                 self.session.add(rec)
@@ -68,25 +70,29 @@ class MacroRepository:
         if series_ids is None:
             # Get all distinct series stored
             series_ids_result = (
-                await self.session.execute(
-                    select(MacroObservationRecord.series_id).distinct()
-                )
-            ).scalars().all()
+                (await self.session.execute(select(MacroObservationRecord.series_id).distinct()))
+                .scalars()
+                .all()
+            )
             series_ids = list(series_ids_result)
 
         result: list[MacroObservationRecord] = []
         for sid in series_ids:
             row = (
-                await self.session.execute(
-                    select(MacroObservationRecord)
-                    .where(
-                        MacroObservationRecord.series_id == sid,
-                        MacroObservationRecord.value.is_not(None),
+                (
+                    await self.session.execute(
+                        select(MacroObservationRecord)
+                        .where(
+                            MacroObservationRecord.series_id == sid,
+                            MacroObservationRecord.value.is_not(None),
+                        )
+                        .order_by(MacroObservationRecord.observation_date.desc())
+                        .limit(1)
                     )
-                    .order_by(MacroObservationRecord.observation_date.desc())
-                    .limit(1)
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             if row is not None:
                 result.append(row)
 
@@ -99,13 +105,17 @@ class MacroRepository:
     ) -> Sequence[MacroObservationRecord]:
         """Return recent history for a single series, oldest-first."""
         return (
-            await self.session.execute(
-                select(MacroObservationRecord)
-                .where(
-                    MacroObservationRecord.series_id == series_id,
-                    MacroObservationRecord.value.is_not(None),
+            (
+                await self.session.execute(
+                    select(MacroObservationRecord)
+                    .where(
+                        MacroObservationRecord.series_id == series_id,
+                        MacroObservationRecord.value.is_not(None),
+                    )
+                    .order_by(MacroObservationRecord.observation_date.asc())
+                    .limit(limit)
                 )
-                .order_by(MacroObservationRecord.observation_date.asc())
-                .limit(limit)
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )

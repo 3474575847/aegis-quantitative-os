@@ -23,6 +23,7 @@ from httpx import AsyncClient
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _backtest_payload(signal_id: str, symbol: str = "BTC") -> dict[str, Any]:
     """Minimal valid backtest response from run_backtest()."""
     return {
@@ -55,18 +56,22 @@ def _backtest_payload(signal_id: str, symbol: str = "BTC") -> dict[str, Any]:
 # Create
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 class TestCreateExperiment:
     async def test_valid_creation_returns_expected_shape(self, async_client: AsyncClient) -> None:
-        resp = await async_client.post("/api/experiments", json={
-            "name": "Momentum BTC",
-            "description": "Testing BTC momentum",
-            "signal_id": str(uuid.uuid4()),
-            "symbol": "BTC",
-            "transaction_cost_bps": 5.0,
-            "slippage_bps": 1.0,
-            "tags": ["momentum", "crypto"],
-        })
+        resp = await async_client.post(
+            "/api/experiments",
+            json={
+                "name": "Momentum BTC",
+                "description": "Testing BTC momentum",
+                "signal_id": str(uuid.uuid4()),
+                "symbol": "BTC",
+                "transaction_cost_bps": 5.0,
+                "slippage_bps": 1.0,
+                "tags": ["momentum", "crypto"],
+            },
+        )
         assert resp.status_code == 200
         d = resp.json()
         assert d["name"] == "Momentum BTC"
@@ -107,6 +112,7 @@ class TestCreateExperiment:
 # Get
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 class TestGetExperiment:
     async def test_nonexistent_returns_404(self, async_client: AsyncClient) -> None:
@@ -115,12 +121,17 @@ class TestGetExperiment:
 
     async def test_roundtrip_create_then_get(self, async_client: AsyncClient) -> None:
         sig_id = str(uuid.uuid4())
-        created = (await async_client.post("/api/experiments", json={
-            "name": "Roundtrip",
-            "signal_id": sig_id,
-            "symbol": "ETH",
-            "transaction_cost_bps": 10.0,
-        })).json()
+        created = (
+            await async_client.post(
+                "/api/experiments",
+                json={
+                    "name": "Roundtrip",
+                    "signal_id": sig_id,
+                    "symbol": "ETH",
+                    "transaction_cost_bps": 10.0,
+                },
+            )
+        ).json()
         exp_id = created["experiment_id"]
 
         fetched = (await async_client.get(f"/api/experiments/{exp_id}")).json()
@@ -136,6 +147,7 @@ class TestGetExperiment:
 # Clone
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 class TestCloneExperiment:
     async def test_clone_nonexistent_returns_404(self, async_client: AsyncClient) -> None:
@@ -147,19 +159,26 @@ class TestCloneExperiment:
 
     async def test_clone_inherits_source_params(self, async_client: AsyncClient) -> None:
         sig_id = str(uuid.uuid4())
-        source = (await async_client.post("/api/experiments", json={
-            "name": "Source",
-            "signal_id": sig_id,
-            "symbol": "BTC",
-            "transaction_cost_bps": 20.0,
-            "slippage_bps": 2.0,
-            "tags": ["original"],
-        })).json()
+        source = (
+            await async_client.post(
+                "/api/experiments",
+                json={
+                    "name": "Source",
+                    "signal_id": sig_id,
+                    "symbol": "BTC",
+                    "transaction_cost_bps": 20.0,
+                    "slippage_bps": 2.0,
+                    "tags": ["original"],
+                },
+            )
+        ).json()
 
-        clone = (await async_client.post(
-            f"/api/experiments/{source['experiment_id']}/clone",
-            params={"name": "Clone A"},
-        )).json()
+        clone = (
+            await async_client.post(
+                f"/api/experiments/{source['experiment_id']}/clone",
+                params={"name": "Clone A"},
+            )
+        ).json()
 
         assert clone["name"] == "Clone A"
         assert clone["signal_id"] == sig_id
@@ -173,22 +192,29 @@ class TestCloneExperiment:
     async def test_clone_with_overrides(self, async_client: AsyncClient) -> None:
         sig_id = str(uuid.uuid4())
         new_sig_id = str(uuid.uuid4())
-        source = (await async_client.post("/api/experiments", json={
-            "name": "Base",
-            "signal_id": sig_id,
-            "symbol": "BTC",
-            "transaction_cost_bps": 5.0,
-        })).json()
+        source = (
+            await async_client.post(
+                "/api/experiments",
+                json={
+                    "name": "Base",
+                    "signal_id": sig_id,
+                    "symbol": "BTC",
+                    "transaction_cost_bps": 5.0,
+                },
+            )
+        ).json()
 
-        clone = (await async_client.post(
-            f"/api/experiments/{source['experiment_id']}/clone",
-            params={
-                "name": "Override clone",
-                "symbol": "ETH",
-                "transaction_cost_bps": 10.0,
-                "signal_id": new_sig_id,
-            },
-        )).json()
+        clone = (
+            await async_client.post(
+                f"/api/experiments/{source['experiment_id']}/clone",
+                params={
+                    "name": "Override clone",
+                    "symbol": "ETH",
+                    "transaction_cost_bps": 10.0,
+                    "signal_id": new_sig_id,
+                },
+            )
+        ).json()
 
         assert clone["symbol"] == "ETH"
         assert clone["transaction_cost_bps"] == 10.0
@@ -198,6 +224,7 @@ class TestCloneExperiment:
 # ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 class TestRunExperiment:
@@ -215,10 +242,15 @@ class TestRunExperiment:
         sig_id = str(uuid.uuid4())
         with patch("aegis_api.main.run_backtest", new_callable=AsyncMock) as mock_bt:
             mock_bt.return_value = _backtest_payload(sig_id)
-            exp = (await async_client.post("/api/experiments", json={
-                "name": "Persist run",
-                "signal_id": sig_id,
-            })).json()
+            exp = (
+                await async_client.post(
+                    "/api/experiments",
+                    json={
+                        "name": "Persist run",
+                        "signal_id": sig_id,
+                    },
+                )
+            ).json()
             run_resp = await async_client.post(f"/api/experiments/{exp['experiment_id']}/run")
 
         assert run_resp.status_code == 200
@@ -236,10 +268,15 @@ class TestRunExperiment:
         sig_id = str(uuid.uuid4())
         with patch("aegis_api.main.run_backtest", new_callable=AsyncMock) as mock_bt:
             mock_bt.return_value = _backtest_payload(sig_id)
-            exp = (await async_client.post("/api/experiments", json={
-                "name": "History check",
-                "signal_id": sig_id,
-            })).json()
+            exp = (
+                await async_client.post(
+                    "/api/experiments",
+                    json={
+                        "name": "History check",
+                        "signal_id": sig_id,
+                    },
+                )
+            ).json()
             exp_id = exp["experiment_id"]
             await async_client.post(f"/api/experiments/{exp_id}/run")
             await async_client.post(f"/api/experiments/{exp_id}/run")
@@ -255,10 +292,15 @@ class TestRunExperiment:
         sig_id = str(uuid.uuid4())
         with patch("aegis_api.main.run_backtest", new_callable=AsyncMock) as mock_bt:
             mock_bt.return_value = _backtest_payload(sig_id)
-            exp = (await async_client.post("/api/experiments", json={
-                "name": "Summary update",
-                "signal_id": sig_id,
-            })).json()
+            exp = (
+                await async_client.post(
+                    "/api/experiments",
+                    json={
+                        "name": "Summary update",
+                        "signal_id": sig_id,
+                    },
+                )
+            ).json()
             exp_id = exp["experiment_id"]
             await async_client.post(f"/api/experiments/{exp_id}/run")
             summary = (await async_client.get(f"/api/experiments/{exp_id}")).json()
@@ -271,13 +313,18 @@ class TestRunExperiment:
     async def test_create_with_initial_result_persists_run(self, async_client: AsyncClient) -> None:
         sig_id = str(uuid.uuid4())
         payload = _backtest_payload(sig_id)["result"]
-        created = (await async_client.post("/api/experiments", json={
-            "name": "Direct Saved Experiment",
-            "signal_id": sig_id,
-            "symbol": "BTC",
-            "initial_result": payload,
-            "methodology": "signal at t positions at t+1",
-        })).json()
+        created = (
+            await async_client.post(
+                "/api/experiments",
+                json={
+                    "name": "Direct Saved Experiment",
+                    "signal_id": sig_id,
+                    "symbol": "BTC",
+                    "initial_result": payload,
+                    "methodology": "signal at t positions at t+1",
+                },
+            )
+        ).json()
 
         assert created["run_count"] == 1
         assert created["latest_status"] == "COMPLETED"
@@ -294,6 +341,7 @@ class TestRunExperiment:
 # Compare
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 class TestCompareExperiments:
     async def test_compare_multiple_experiments_post(self, async_client: AsyncClient) -> None:
@@ -302,23 +350,36 @@ class TestCompareExperiments:
         res_1 = _backtest_payload(sig_id_1)["result"]
         res_2 = dict(res_1, sharpe=1.45, total_return=0.15)
 
-        exp1 = (await async_client.post("/api/experiments", json={
-            "name": "Exp 1",
-            "signal_id": sig_id_1,
-            "symbol": "BTC",
-            "initial_result": res_1,
-        })).json()
+        exp1 = (
+            await async_client.post(
+                "/api/experiments",
+                json={
+                    "name": "Exp 1",
+                    "signal_id": sig_id_1,
+                    "symbol": "BTC",
+                    "initial_result": res_1,
+                },
+            )
+        ).json()
 
-        exp2 = (await async_client.post("/api/experiments", json={
-            "name": "Exp 2",
-            "signal_id": sig_id_2,
-            "symbol": "ETH",
-            "initial_result": res_2,
-        })).json()
+        exp2 = (
+            await async_client.post(
+                "/api/experiments",
+                json={
+                    "name": "Exp 2",
+                    "signal_id": sig_id_2,
+                    "symbol": "ETH",
+                    "initial_result": res_2,
+                },
+            )
+        ).json()
 
-        compare_resp = await async_client.post("/api/experiments/compare", json={
-            "experiment_ids": [exp1["experiment_id"], exp2["experiment_id"]],
-        })
+        compare_resp = await async_client.post(
+            "/api/experiments/compare",
+            json={
+                "experiment_ids": [exp1["experiment_id"], exp2["experiment_id"]],
+            },
+        )
         assert compare_resp.status_code == 200
         comp_data = compare_resp.json()
         assert comp_data["count"] == 2
@@ -336,10 +397,15 @@ class TestCompareExperiments:
 
     async def test_compare_via_get_endpoint(self, async_client: AsyncClient) -> None:
         sig_id = str(uuid.uuid4())
-        exp = (await async_client.post("/api/experiments", json={
-            "name": "Get Compare Test",
-            "signal_id": sig_id,
-        })).json()
+        exp = (
+            await async_client.post(
+                "/api/experiments",
+                json={
+                    "name": "Get Compare Test",
+                    "signal_id": sig_id,
+                },
+            )
+        ).json()
 
         resp = await async_client.get(f"/api/experiments/compare?ids={exp['experiment_id']}")
         assert resp.status_code == 200
@@ -347,17 +413,25 @@ class TestCompareExperiments:
 
     async def test_compare_with_missing_metrics_shows_none(self, async_client: AsyncClient) -> None:
         sig_id = str(uuid.uuid4())
-        exp = (await async_client.post("/api/experiments", json={
-            "name": "No Runs Yet",
-            "signal_id": sig_id,
-            "symbol": "SOL",
-            "transaction_cost_bps": 12.0,
-            "slippage_bps": 2.5,
-        })).json()
+        exp = (
+            await async_client.post(
+                "/api/experiments",
+                json={
+                    "name": "No Runs Yet",
+                    "signal_id": sig_id,
+                    "symbol": "SOL",
+                    "transaction_cost_bps": 12.0,
+                    "slippage_bps": 2.5,
+                },
+            )
+        ).json()
 
-        resp = await async_client.post("/api/experiments/compare", json={
-            "experiment_ids": [exp["experiment_id"]],
-        })
+        resp = await async_client.post(
+            "/api/experiments/compare",
+            json={
+                "experiment_ids": [exp["experiment_id"]],
+            },
+        )
         assert resp.status_code == 200
         item = resp.json()["experiments"][0]
         assert item["metrics"] is None
@@ -366,15 +440,19 @@ class TestCompareExperiments:
         assert item["slippage_bps"] == 2.5
 
     async def test_compare_invalid_uuid_returns_422(self, async_client: AsyncClient) -> None:
-        resp = await async_client.post("/api/experiments/compare", json={
-            "experiment_ids": ["invalid-not-a-uuid"],
-        })
+        resp = await async_client.post(
+            "/api/experiments/compare",
+            json={
+                "experiment_ids": ["invalid-not-a-uuid"],
+            },
+        )
         assert resp.status_code == 422
 
 
 # ---------------------------------------------------------------------------
 # Failure & Edge Case Tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 class TestBacktestFailureModes:
@@ -410,13 +488,18 @@ class TestBacktestFailureModes:
         sig_id = str(uuid.uuid4())
         with patch("aegis_api.main.run_backtest", new_callable=AsyncMock) as mock_bt:
             mock_bt.return_value = _backtest_payload(sig_id)
-            exp = (await async_client.post("/api/experiments", json={
-                "name": "Immutability Test",
-                "signal_id": sig_id,
-                "symbol": "BTC",
-                "transaction_cost_bps": 7.5,
-                "slippage_bps": 1.0,
-            })).json()
+            exp = (
+                await async_client.post(
+                    "/api/experiments",
+                    json={
+                        "name": "Immutability Test",
+                        "signal_id": sig_id,
+                        "symbol": "BTC",
+                        "transaction_cost_bps": 7.5,
+                        "slippage_bps": 1.0,
+                    },
+                )
+            ).json()
             exp_id = exp["experiment_id"]
 
             # Run twice

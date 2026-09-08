@@ -87,6 +87,7 @@ class NewsRepository(BaseRepository[CanonicalArticleRecord]):
     ) -> Sequence[RawNewsArticleRecord]:
         # canonical_id arrives as a string; UUID column requires a uuid.UUID object
         import uuid as _uuid
+
         try:
             canonical_uuid = _uuid.UUID(canonical_id)
         except (ValueError, AttributeError):

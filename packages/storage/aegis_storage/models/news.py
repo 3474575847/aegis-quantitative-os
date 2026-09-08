@@ -16,9 +16,7 @@ class RawNewsArticleRecord(Base):
 
     __tablename__ = "raw_news_articles"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     provider_id: Mapped[str] = mapped_column(String(50), nullable=False)
     article_id: Mapped[str] = mapped_column(String(255), nullable=False)
     headline: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -65,9 +63,7 @@ class CanonicalArticleRecord(Base):
 
     __tablename__ = "canonical_articles"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     cluster_id: Mapped[str] = mapped_column(String(64), nullable=False)
     primary_headline: Mapped[str] = mapped_column(String(500), nullable=False)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)

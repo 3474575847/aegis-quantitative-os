@@ -78,9 +78,7 @@ class FactorExecutionHandler:
         engine.register_processor("REDDIT_SENTIMENT_LEAD", RedditSentimentProcessor())
 
         async for session in self.db_manager.get_session():
-            definitions = (
-                await session.execute(select(SignalDefinitionRecord))
-            ).scalars().all()
+            definitions = (await session.execute(select(SignalDefinitionRecord))).scalars().all()
 
         source_event_ids = [uuid.UUID(e["event_id"]) for e in events_data if e.get("event_id")]
         if event.source in ["MARKET_BTC_USD", "market_btc_usd"]:
@@ -90,9 +88,7 @@ class FactorExecutionHandler:
             )
             signal_names = {"BTC_MOMENTUM_ZSCORE", "MEAN_REVERSION_PRICE"}
         elif event.source in ["REDDIT", "reddit_wallstreetbets"]:
-            current_score = sum(
-                float(e.get("data", {}).get("score", 0) or 0) for e in events_data
-            )
+            current_score = sum(float(e.get("data", {}).get("score", 0) or 0) for e in events_data)
             reddit_definition = next(
                 (record for record in definitions if record.name == "REDDIT_SENTIMENT_LEAD"),
                 None,
@@ -206,6 +202,7 @@ async def main() -> None:
     # Macro ingestion pipeline (runs every 60 minutes — FRED data is daily)
     macro_pipeline = MacroPipeline(db_manager)
     macro_interval_seconds = int(os.getenv("MACRO_INGESTION_INTERVAL", "3600"))
+
     async def macro_ingestion_loop() -> None:
         """Scheduled FRED macro ingest: fetch 6 series → upsert on interval."""
         while True:

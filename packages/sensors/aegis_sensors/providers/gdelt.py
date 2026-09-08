@@ -87,9 +87,8 @@ class GDELTNewsProvider(NewsDataProvider):
                 published_at = now
                 if seendate and len(seendate) >= 15:
                     try:
-                        published_at = (
-                            datetime.strptime(seendate[:15], "%Y%m%dT%H%M%S")
-                            .replace(tzinfo=UTC)
+                        published_at = datetime.strptime(seendate[:15], "%Y%m%dT%H%M%S").replace(
+                            tzinfo=UTC
                         )
                     except Exception:
                         published_at = now
