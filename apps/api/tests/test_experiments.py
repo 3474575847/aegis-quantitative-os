@@ -87,7 +87,9 @@ class TestCreateExperiment:
         assert resp.status_code == 422
 
     async def test_symbol_is_uppercased(self, async_client: AsyncClient) -> None:
-        resp = await async_client.post("/api/experiments", json={"name": "Case test", "symbol": "btc"})
+        resp = await async_client.post(
+            "/api/experiments", json={"name": "Case test", "symbol": "btc"}
+        )
         assert resp.status_code == 200
         assert resp.json()["symbol"] == "BTC"
 
@@ -322,8 +324,10 @@ class TestCompareExperiments:
         assert comp_data["count"] == 2
         assert len(comp_data["experiments"]) == 2
 
-        exp1_comp = next(e for e in comp_data["experiments"] if e["experiment_id"] == exp1["experiment_id"])
-        exp2_comp = next(e for e in comp_data["experiments"] if e["experiment_id"] == exp2["experiment_id"])
+        exp1_id = exp1["experiment_id"]
+        exp2_id = exp2["experiment_id"]
+        exp1_comp = next(e for e in comp_data["experiments"] if e["experiment_id"] == exp1_id)
+        exp2_comp = next(e for e in comp_data["experiments"] if e["experiment_id"] == exp2_id)
 
         assert exp1_comp["metrics"]["sharpe"] == pytest.approx(0.918, rel=1e-3)
         assert exp2_comp["metrics"]["sharpe"] == pytest.approx(1.45, rel=1e-3)
@@ -387,7 +391,9 @@ class TestBacktestFailureModes:
             resp = await async_client.post(f"/api/backtests/{non_existent}?symbol=BTC")
             assert resp.status_code == 404
 
-    async def test_backtest_insufficient_market_candles_returns_422(self, async_client: AsyncClient) -> None:
+    async def test_backtest_insufficient_market_candles_returns_422(
+        self, async_client: AsyncClient
+    ) -> None:
         sig_id = str(uuid.uuid4())
         with patch("aegis_api.main.get_market_ticker_history", new_callable=AsyncMock) as mock_hist:
             mock_hist.return_value = {
@@ -398,7 +404,9 @@ class TestBacktestFailureModes:
             assert resp.status_code == 422
             assert "Insufficient real market history" in resp.json()["detail"]
 
-    async def test_rerun_does_not_mutate_experiment_definition(self, async_client: AsyncClient) -> None:
+    async def test_rerun_does_not_mutate_experiment_definition(
+        self, async_client: AsyncClient
+    ) -> None:
         sig_id = str(uuid.uuid4())
         with patch("aegis_api.main.run_backtest", new_callable=AsyncMock) as mock_bt:
             mock_bt.return_value = _backtest_payload(sig_id)

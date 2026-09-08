@@ -1,6 +1,21 @@
-"use client";
+'use client';
 
-import React, { useCallback, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  AreaSeries,
+  ColorType,
+  createChart,
+  createSeriesMarkers,
+  CrosshairMode,
+  HistogramSeries,
+  LineSeries,
+  type IChartApi,
+  type ISeriesApi,
+  type SeriesMarker,
+  type Time,
+  type UTCTimestamp,
+} from 'lightweight-charts';
+import { formatFigure, formatPercent, formatSignedFigure } from '../../lib/api';
 
 export interface ChartDatapoint {
   timestamp: string;
@@ -15,509 +30,202 @@ export interface ChartDatapoint {
   eventTitle?: string | null;
 }
 
+export interface ChartSignal {
+  action: 'BUY' | 'SELL' | 'HOLD';
+  confidence: number;
+  rationale: string;
+  article_id: string;
+  market_timestamp: string;
+  headline: string;
+  factor_values?: Record<string, number>;
+  factor_contributions?: Array<{ name: string; value: number; weight: number; contribution: number }>;
+}
+
 interface Props {
   data?: ChartDatapoint[];
+  signals?: ChartSignal[];
   assetName?: string;
 }
 
-interface HoverState {
-  x: number;
-  price: number;
-  sentimentZ: number;
-  timestamp: string;
-  eventTitle?: string | null;
-  isInterpolated: boolean;
+interface CandlePoint {
+  time: UTCTimestamp;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number;
 }
 
-// Linear interpolation between two numbers
-function lerp(a: number, b: number, t: number) {
-  return a + (b - a) * t;
+interface Measurement {
+  start: { time: UTCTimestamp; price: number };
+  end: { time: UTCTimestamp; price: number };
 }
 
-// Interpolate a timestamp string like "07:30" between two strings
-function lerpTimestamp(a: string, b: string, t: number) {
-  const [ah, am] = a.split(":").map(Number);
-  const [bh, bm] = b.split(":").map(Number);
-  const totalA = ah * 60 + am;
-  const totalB = bh * 60 + bm;
-  const total = Math.round(lerp(totalA, totalB, t));
-  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+const COLORS = {
+  green: '#10b981',
+  red: '#ef4444',
+  cyan: '#06b6d4',
+  amber: '#f59e0b',
+  purple: '#8b5cf6',
+  grid: '#242e42',
+  text: '#94a3b8',
+};
+
+function cleanCandles(data: ChartDatapoint[]): CandlePoint[] {
+  const deduped = new Map<number, CandlePoint>();
+  for (const point of data) {
+    const time = point.time;
+    const open = point.open ?? point.price;
+    const high = point.high ?? point.price;
+    const low = point.low ?? point.price;
+    const close = point.close ?? point.price;
+    if (!time || ![open, high, low, close].every(Number.isFinite) || low > high || open < low || open > high || close < low || close > high) continue;
+    deduped.set(time, { time: time as UTCTimestamp, open, high, low, close, volume: point.volume });
+  }
+  return [...deduped.values()].sort((a, b) => Number(a.time) - Number(b.time));
 }
 
-export default function SentimentPriceChart({ data = [], assetName = "BTC/USD" }: Props) {
-  const svgRef = useRef<SVGSVGElement>(null);
+function sma(candles: CandlePoint[], period: number) {
+  return candles.map((candle, index) => {
+    if (index + 1 < period) return { time: candle.time, value: candle.close };
+    const window = candles.slice(index + 1 - period, index + 1);
+    return { time: candle.time, value: window.reduce((sum, item) => sum + item.close, 0) / period };
+  });
+}
+
+function ema(candles: CandlePoint[], period: number) {
+  const alpha = 2 / (period + 1);
+  let previous = candles[0]?.close ?? 0;
+  return candles.map((candle, index) => {
+    previous = index === 0 ? candle.close : alpha * candle.close + (1 - alpha) * previous;
+    return { time: candle.time, value: previous };
+  });
+}
+
+export default function SentimentPriceChart({ data = [], signals = [], assetName = 'BTC/USD' }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [hover, setHover] = useState<HoverState | null>(null);
-  const [rangeHours, setRangeHours] = useState(24);
-  const [showIndicators, setShowIndicators] = useState(false);
+  const chartRef = useRef<IChartApi | null>(null);
+  const candleRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const [chartType, setChartType] = useState<'candles' | 'line' | 'area'>('candles');
+  const [showVolume, setShowVolume] = useState(true);
+  const [showSma, setShowSma] = useState(false);
+  const [showEma, setShowEma] = useState(false);
+  const [showBollinger, setShowBollinger] = useState(false);
+  const [range, setRange] = useState<'1D' | '1W' | '1M'>('1D');
+  const [hover, setHover] = useState<CandlePoint | null>(null);
+  const [measurementStart, setMeasurementStart] = useState<{ time: UTCTimestamp; price: number } | null>(null);
+  const [measurement, setMeasurement] = useState<Measurement | null>(null);
 
-  const sourceData = data;
-  const rangeStart = sourceData.length > 0 && sourceData[0].time
-    ? sourceData[sourceData.length - 1].time! - rangeHours * 60 * 60
-    : 0;
-  const rangedData = sourceData.filter((point) => !point.time || point.time >= rangeStart);
-  const maxDisplayPoints = 72;
-  const sampleStep = Math.max(1, Math.ceil(rangedData.length / maxDisplayPoints));
-  const chartData: ChartDatapoint[] = rangedData.filter(
-    (_, index) => index % sampleStep === 0 || index === rangedData.length - 1
-  );
+  const candles = useMemo(() => cleanCandles(data), [data]);
+  const markerData = useMemo<SeriesMarker<Time>[]>(() => signals.filter((signal) => signal.action !== 'HOLD').flatMap((signal) => {
+    const timestamp = Math.floor(Date.parse(signal.market_timestamp) / 1000) as UTCTimestamp;
+    return [{
+      time: timestamp,
+      position: signal.action === 'BUY' ? 'belowBar' : 'aboveBar',
+      color: signal.action === 'BUY' ? COLORS.green : COLORS.red,
+      shape: signal.action === 'BUY' ? 'arrowUp' : 'arrowDown',
+      text: signal.action,
+    }];
+  }), [signals]);
 
-  // ── Layout constants ────────────────────────────────────────────────────────
-  const PAD = { top: 32, right: 52, bottom: 48, left: 62 };
+  useEffect(() => {
+    if (!containerRef.current || candles.length === 0) return;
+    const chart = createChart(containerRef.current, {
+      layout: { background: { type: ColorType.Solid, color: '#121722' }, textColor: COLORS.text },
+      grid: { vertLines: { color: COLORS.grid }, horzLines: { color: COLORS.grid } },
+      crosshair: { mode: CrosshairMode.Normal },
+      rightPriceScale: { borderColor: COLORS.grid },
+      timeScale: { borderColor: COLORS.grid, timeVisible: true, secondsVisible: false },
+      width: containerRef.current.clientWidth,
+      height: 430,
+    });
+    chartRef.current = chart;
+    const candleSeries = chart.addSeries({
+      type: chartType === 'candles' ? 'Candlestick' : chartType === 'area' ? 'Area' : 'Line',
+      upColor: COLORS.green,
+      downColor: COLORS.red,
+      borderUpColor: COLORS.green,
+      borderDownColor: COLORS.red,
+      wickUpColor: COLORS.green,
+      wickDownColor: COLORS.red,
+      lineColor: COLORS.cyan,
+      topColor: 'rgba(6, 182, 212, 0.35)',
+      bottomColor: 'rgba(6, 182, 212, 0.02)',
+    } as never);
+    candleRef.current = candleSeries as ISeriesApi<'Candlestick'>;
+    if (chartType === 'candles') candleSeries.setData(candles);
+    else candleSeries.setData(candles.map((candle) => ({ time: candle.time, value: candle.close })));
+    createSeriesMarkers(candleSeries, markerData);
 
-  // Scales (computed lazily inside handlers using current SVG dimensions)
-  const prices = chartData.length > 0 ? chartData.map((d) => d.price) : [0];
-  const minPrice = Math.min(...prices) * 0.998;
-  const maxPrice = Math.max(...prices) * 1.002;
-  const minZ = -3.0;
-  const maxZ = 3.0;
+    if (showVolume) {
+      const volumeSeries = chart.addSeries(HistogramSeries, { priceFormat: { type: 'volume' }, priceScaleId: '' });
+      volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+      volumeSeries.setData(candles.map((candle) => ({ time: candle.time, value: candle.volume ?? 0, color: candle.close >= candle.open ? 'rgba(16,185,129,.45)' : 'rgba(239,68,68,.45)' })));
+    }
+    if (showSma) {
+      const series = chart.addSeries(LineSeries, { color: COLORS.amber, lineWidth: 2, title: 'SMA 20' });
+      series.setData(sma(candles, 20));
+    }
+    if (showEma) {
+      const series = chart.addSeries(LineSeries, { color: COLORS.cyan, lineWidth: 2, title: 'EMA 21' });
+      series.setData(ema(candles, 21));
+    }
+    if (showBollinger) {
+      const upper = chart.addSeries(LineSeries, { color: COLORS.purple, lineWidth: 1, title: 'BB upper' });
+      const lower = chart.addSeries(LineSeries, { color: COLORS.purple, lineWidth: 1, title: 'BB lower' });
+      const average = sma(candles, 20);
+      upper.setData(average.map((item, index) => ({ time: item.time, value: item.value + 2 * (candles[index].high - candles[index].low) })));
+      lower.setData(average.map((item, index) => ({ time: item.time, value: item.value - 2 * (candles[index].high - candles[index].low) })));
+    }
+    chart.subscribeCrosshairMove((param) => {
+      const value = param.seriesData.get(candleSeries as never);
+      if (value && 'open' in value) setHover(value as CandlePoint);
+    });
+    const resize = () => chart.applyOptions({ width: containerRef.current?.clientWidth ?? 760 });
+    const observer = new ResizeObserver(resize);
+    observer.observe(containerRef.current);
+    chart.timeScale().fitContent();
+    return () => { observer.disconnect(); chart.remove(); chartRef.current = null; };
+  }, [candles, chartType, markerData, showBollinger, showEma, showSma, showVolume]);
 
-  const getX = useCallback(
-    (index: number, innerW: number) => {
-      if (chartData.length <= 1) return PAD.left + innerW / 2;
-      return PAD.left + (index / (chartData.length - 1)) * innerW;
-    },
-    [chartData.length, PAD.left]
-  );
-
-  const getPriceY = useCallback(
-    (price: number, innerH: number) => {
-      if (maxPrice === minPrice) return PAD.top + innerH / 2;
-      return PAD.top + innerH - ((price - minPrice) / (maxPrice - minPrice)) * innerH;
-    },
-    [maxPrice, minPrice, PAD.top]
-  );
-
-  const getZY = useCallback(
-    (z: number, innerH: number) =>
-      PAD.top + innerH - ((z - minZ) / (maxZ - minZ)) * innerH,
-    [PAD.top]
-  );
-
-  // ── Mouse interaction ───────────────────────────────────────────────────────
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent<SVGSVGElement>) => {
-      const svg = svgRef.current;
-      if (!svg) return;
-      const rect = svg.getBoundingClientRect();
-      const svgW = rect.width;
-      const svgH = rect.height;
-      if (chartData.length === 0) return;
-      const innerW = svgW - PAD.left - PAD.right;
-      const innerH = svgH - PAD.top - PAD.bottom;
-
-      const mouseX = e.clientX - rect.left;
-
-      // Clamp to chart area
-      const clampedX = Math.max(PAD.left, Math.min(mouseX, PAD.left + innerW));
-
-      // Map x → fractional index
-      const fracIndex = ((clampedX - PAD.left) / innerW) * (chartData.length - 1);
-      const i0 = Math.max(0, Math.floor(fracIndex));
-      const i1 = Math.min(chartData.length - 1, i0 + 1);
-      const t = fracIndex - i0;
-
-      const d0 = chartData[i0];
-      const d1 = chartData[i1];
-
-      const isExact = t < 0.02 || i0 === i1;
-      const price = isExact ? d0.price : lerp(d0.price, d1.price, t);
-      const sentimentZ = isExact ? d0.sentimentZ : lerp(d0.sentimentZ, d1.sentimentZ, t);
-      const timestamp = isExact ? d0.timestamp : lerpTimestamp(d0.timestamp, d1.timestamp, t);
-      const eventTitle = isExact ? d0.eventTitle : (d0.eventTitle ?? d1.eventTitle ?? null);
-
-      setHover({
-        x: clampedX,
-        price,
-        sentimentZ: Math.max(-3, Math.min(3, sentimentZ)),
-        timestamp,
-        eventTitle,
-        isInterpolated: !isExact,
-      });
-    },
-    [chartData, PAD]
-  );
-
-  // ── Build SVG paths using viewBox (we'll set viewBox="0 0 W H" and let the
-  //    SVG scale via CSS width:100%). Internally we work at a logical 760×280.
-  const VW = 760;
-  const VH = 280;
-  const innerW = VW - PAD.left - PAD.right;
-  const innerH = VH - PAD.top - PAD.bottom;
-  const priceInnerH = innerH - 42;
-  const maxVolume = Math.max(...chartData.map((d) => d.volume || 0), 1);
-
-  const getXv = (i: number) => getX(i, innerW);
-  const getPriceYv = (p: number) => getPriceY(p, priceInnerH);
-  const getZYv = (z: number) => getZY(z, innerH);
-  const hasCandles = chartData.some((d) => d.open !== undefined && d.high !== undefined && d.low !== undefined && d.close !== undefined);
-  const movingAverage = chartData.map((point, index) => {
-    const window = chartData.slice(Math.max(0, index - 19), index + 1);
-    return window.reduce((sum, item) => sum + item.price, 0) / window.length;
-  });
-  const movingDeviation = chartData.map((point, index) => {
-    const window = chartData.slice(Math.max(0, index - 19), index + 1);
-    const mean = movingAverage[index];
-    return Math.sqrt(window.reduce((sum, item) => sum + (item.price - mean) ** 2, 0) / window.length);
-  });
-
-  const linePoints = chartData.map((d, i) => `${getXv(i)},${getPriceYv(d.price)}`).join(" ");
-  const areaPoints = `${PAD.left},${VH - PAD.bottom} ${linePoints} ${VW - PAD.right},${VH - PAD.bottom}`;
-
-  // Hover crosshair X, mapped from screen → viewBox
-  const hoverVX = hover
-    ? (() => {
-        const svg = svgRef.current;
-        if (!svg) return null;
-        const rect = svg.getBoundingClientRect();
-        const svgW = rect.width;
-        const fracX = (hover.x - PAD.left) / (svgW - PAD.left - PAD.right);
-        return PAD.left + fracX * innerW;
-      })()
-    : null;
+  const measuredChange = measurement ? measurement.end.price - measurement.start.price : null;
+  const measuredReturn = measurement ? measuredChange! / measurement.start.price : null;
+  const measuredDays = measurement ? Math.round((Number(measurement.end.time) - Number(measurement.start.time)) / 86400) : null;
 
   return (
-    <div
-      ref={containerRef}
-      className="card"
-      style={{
-        border: "1px solid rgba(0, 210, 255, 0.2)",
-        backgroundColor: "rgba(18, 23, 34, 0.75)",
-        backdropFilter: "blur(12px)",
-        borderRadius: "10px",
-        padding: "20px",
-        boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
-        display: "flex",
-        flexDirection: "column",
-        gap: "12px",
-        width: "100%",
-        boxSizing: "border-box",
-      }}
-    >
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "8px" }}>
+    <section className="card" style={{ minWidth: 0, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <span style={{ fontSize: "14px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--text-primary)" }}>
-              📊 Dual-Axis Price & Sentiment Overlay
-            </span>
-            <span className="badge badge-cyan font-mono" style={{ fontSize: "11px", fontWeight: 700 }}>
-              {assetName}
-            </span>
-          </div>
-          <p style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "3px" }}>
-            Inspect real market candles and attached sentiment observations.
-          </p>
+          <div className="card-title">Aegis Research Chart / {assetName}</div>
+          <strong className="card-value" style={{ fontSize: 24 }}>
+            {hover ? `$${formatFigure(hover.close)}` : candles.length ? `$${formatFigure(candles.at(-1)!.close)}` : 'No market data'}
+          </strong>
+          {hover && <div className="font-mono" style={{ color: COLORS.text, fontSize: 11 }}>O {formatFigure(hover.open)} H {formatFigure(hover.high)} L {formatFigure(hover.low)} C {formatFigure(hover.close)} · V {hover.volume == null ? 'Unavailable' : formatFigure(hover.volume)}</div>}
         </div>
-        <div style={{ display: "flex", gap: "14px", fontSize: "11px", fontFamily: "var(--font-mono)" }}>
-          <span style={{ display: "flex", alignItems: "center", gap: "5px", color: "var(--accent-cyan)", fontWeight: 600 }}>
-            <span style={{ display: "inline-block", width: 22, height: 3, borderRadius: 2, background: "var(--accent-cyan)" }} />
-            Spot Price ($)
-          </span>
-          <span style={{ display: "flex", alignItems: "center", gap: "5px", color: "var(--accent-purple)", fontWeight: 600 }}>
-            <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: 2, background: "rgba(139,92,246,0.55)" }} />
-            Sentiment Z-Score
-          </span>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+          {(['1D', '1W', '1M'] as const).map((item) => <button key={item} className={`btn ${range === item ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setRange(item)}>{item}</button>)}
+          <select className="btn btn-secondary" value={chartType} onChange={(event) => setChartType(event.target.value as typeof chartType)}><option value="candles">Candles</option><option value="line">Line</option><option value="area">Area</option></select>
+          <button className={`btn ${showVolume ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setShowVolume((value) => !value)}>Volume</button>
+          <button className={`btn ${showSma ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setShowSma((value) => !value)}>SMA</button>
+          <button className={`btn ${showEma ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setShowEma((value) => !value)}>EMA</button>
+          <button className={`btn ${showBollinger ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setShowBollinger((value) => !value)}>BOLL</button>
+          <button className={`btn ${measurementStart ? 'btn-primary' : 'btn-secondary'}`} onClick={() => { setMeasurementStart(null); setMeasurement(null); }}>Ruler</button>
         </div>
       </div>
-
-      <div style={{ display: "flex", gap: "6px", alignItems: "center" }} aria-label="Chart time range">
-        {[1, 6, 24].map((hours) => (
-          <button
-            key={hours}
-            type="button"
-            className={`btn ${rangeHours === hours ? "btn-primary" : "btn-secondary"}`}
-            onClick={() => {
-              setRangeHours(hours);
-              setHover(null);
-            }}
-            style={{ padding: "5px 10px", fontSize: "11px", minWidth: "42px" }}
-          >
-            {hours === 24 ? "1D" : `${hours}H`}
-          </button>
-        ))}
-        <span className="font-mono" style={{ marginLeft: "6px", color: "var(--text-muted)", fontSize: "10px" }}>
-          {chartData.length} candles shown
-        </span>
-        <button type="button" className={`btn ${showIndicators ? "btn-primary" : "btn-secondary"}`} onClick={() => setShowIndicators((current) => !current)} style={{ marginLeft: "auto", padding: "5px 10px", fontSize: "11px" }}>
-          SMA / BOLL
-        </button>
-        <button type="button" className="btn btn-secondary" onClick={() => { setRangeHours(24); setHover(null); }} style={{ padding: "5px 10px", fontSize: "11px" }}>
-          RESET
-        </button>
-      </div>
-
-      {/* ── SVG Canvas — fills full container width, maintains aspect ratio ── */}
-      <div style={{ width: "100%", position: "relative" }}>
-        <svg
-          ref={svgRef}
-          viewBox={`0 0 ${VW} ${VH}`}
-          preserveAspectRatio="xMidYMid meet"
-          style={{ width: "100%", height: "auto", display: "block", cursor: "crosshair", overflow: "visible" }}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={() => setHover(null)}
-          onWheel={(event) => {
-            event.preventDefault();
-            setRangeHours((current) => Math.max(1, Math.min(24, current + (event.deltaY > 0 ? 1 : -1))));
-            setHover(null);
-          }}
-        >
-          <defs>
-            <linearGradient id={`priceGrad-${assetName}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--accent-cyan)" stopOpacity="0.28" />
-              <stop offset="100%" stopColor="var(--accent-cyan)" stopOpacity="0.0" />
-            </linearGradient>
-          </defs>
-
-          {/* Grid lines */}
-          {[0, 0.25, 0.5, 0.75, 1].map((r, idx) => (
-            <line key={idx}
-              x1={PAD.left} y1={PAD.top + innerH * r}
-              x2={VW - PAD.right} y2={PAD.top + innerH * r}
-              stroke="var(--border-color)" strokeDasharray="3 3" opacity={0.45}
-            />
-          ))}
-
-          {chartData.length === 0 && (
-            <text x={VW / 2} y={VH / 2} textAnchor="middle" fill="var(--text-muted)" fontSize="12" fontFamily="var(--font-mono)">
-              Market history unavailable from the configured provider
-            </text>
-          )}
-
-          {/* Z=0 baseline */}
-          <line
-            x1={PAD.left} y1={getZYv(0)}
-            x2={VW - PAD.right} y2={getZYv(0)}
-            stroke="var(--accent-purple)" strokeDasharray="4 4" opacity={0.45}
-          />
-
-          {/* Sentiment bars */}
-          {chartData.map((d, i) => {
-            const x = getXv(i);
-            const y0 = getZYv(0);
-            const yVal = getZYv(d.sentimentZ);
-            const barW = Math.max(8, innerW / (chartData.length * 2.2));
-            const barY = Math.min(y0, yVal);
-            const barH = Math.max(3, Math.abs(y0 - yVal));
-            const isPos = d.sentimentZ >= 0;
-            return (
-              <rect key={`bar-${i}`}
-                x={x - barW / 2} y={barY} width={barW} height={barH}
-                fill={isPos ? "var(--accent-purple)" : "var(--accent-red)"}
-                opacity={hover ? 0.28 : 0.42} rx={2}
-              />
-            );
-          })}
-
-          {/* Volume strip */}
-          {chartData.map((d, i) => {
-            if (!d.volume) return null;
-            const x = getXv(i);
-            const barW = Math.max(2, innerW / chartData.length * 0.65);
-            const height = (d.volume / maxVolume) * 34;
-            const y = VH - PAD.bottom - height;
-            return (
-              <rect
-                key={`volume-${i}`}
-                x={x - barW / 2}
-                y={y}
-                width={barW}
-                height={height}
-                fill={d.close !== undefined && d.open !== undefined && d.close >= d.open ? "var(--accent-green)" : "var(--accent-red)"}
-                opacity={0.28}
-              />
-            );
-          })}
-
-          {/* Price area fill for non-candle fallback data */}
-          {!hasCandles && <polygon points={areaPoints} fill={`url(#priceGrad-${assetName})`} />}
-
-          {/* Real OHLC candles */}
-          {hasCandles && chartData.map((d, i) => {
-            if (d.open === undefined || d.high === undefined || d.low === undefined || d.close === undefined) return null;
-            const x = getXv(i);
-            const candleWidth = Math.max(3, innerW / chartData.length * 0.62);
-            const isUp = d.close >= d.open;
-            const bodyTop = getPriceYv(Math.max(d.open, d.close));
-            const bodyBottom = getPriceYv(Math.min(d.open, d.close));
-            return (
-              <g key={`candle-${i}`}>
-                <line x1={x} y1={getPriceYv(d.high)} x2={x} y2={getPriceYv(d.low)} stroke={isUp ? "var(--accent-green)" : "var(--accent-red)"} strokeWidth="1" />
-                <rect
-                  x={x - candleWidth / 2}
-                  y={bodyTop}
-                  width={candleWidth}
-                  height={Math.max(1.5, bodyBottom - bodyTop)}
-                  fill={isUp ? "var(--accent-green)" : "var(--accent-red)"}
-                  stroke={isUp ? "var(--accent-green)" : "var(--accent-red)"}
-                  rx="1"
-                />
-              </g>
-            );
-          })}
-
-          {showIndicators && hasCandles && (
-            <>
-              <polyline fill="none" stroke="var(--accent-amber)" strokeWidth="1.5" points={movingAverage.map((value, index) => `${getXv(index)},${getPriceYv(value)}`).join(" ")} />
-              <polyline fill="none" stroke="var(--accent-amber)" strokeWidth="1" strokeDasharray="4 3" opacity="0.65" points={movingAverage.map((value, index) => `${getXv(index)},${getPriceYv(value + movingDeviation[index] * 2)}`).join(" ")} />
-              <polyline fill="none" stroke="var(--accent-amber)" strokeWidth="1" strokeDasharray="4 3" opacity="0.65" points={movingAverage.map((value, index) => `${getXv(index)},${getPriceYv(value - movingDeviation[index] * 2)}`).join(" ")} />
-            </>
-          )}
-
-          {/* Price line for fallback/non-OHLC data */}
-          {!hasCandles && <polyline
-            fill="none"
-            stroke="var(--accent-cyan)"
-            strokeWidth="2.5"
-            strokeLinejoin="round"
-            strokeLinecap="round"
-            points={linePoints}
-          />}
-
-          {/* Event markers */}
-          {chartData.map((d, i) => {
-            const x = getXv(i);
-            const y = getPriceYv(d.price);
-            return (
-              <g key={`pt-${i}`}>
-                {d.eventTitle && (
-                  <circle cx={x} cy={y} r={7} fill="rgba(0,210,255,0.18)" stroke="var(--accent-cyan)" strokeWidth="1.5" />
-                )}
-              </g>
-            );
-          })}
-
-          {/* Hover crosshair + interpolated dot */}
-          {hoverVX !== null && hover && (
-            <>
-              {/* vertical line */}
-              <line
-                x1={hoverVX} y1={PAD.top}
-                x2={hoverVX} y2={VH - PAD.bottom}
-                stroke="rgba(255,255,255,0.35)" strokeWidth="1" strokeDasharray="3 3"
-              />
-              {/* interpolated price dot */}
-              <circle
-                cx={hoverVX}
-                cy={getPriceYv(hover.price)}
-                r={5}
-                fill="white"
-                stroke="var(--accent-cyan)"
-                strokeWidth="2"
-              />
-              {/* interpolated Z dot on baseline level */}
-              <circle
-                cx={hoverVX}
-                cy={getZYv(hover.sentimentZ)}
-                r={4}
-                fill="var(--accent-purple)"
-                opacity={0.85}
-              />
-            </>
-          )}
-
-          {/* Y-Axis labels — left (price) */}
-          {[maxPrice, (maxPrice + minPrice) / 2, minPrice].map((p, i) => (
-            <text key={`lp-${i}`}
-              x={PAD.left - 8}
-              y={getPriceYv(p) + 4}
-              textAnchor="end"
-              fill={i === 1 ? "var(--text-muted)" : "var(--accent-cyan)"}
-              fontSize="9.5"
-              fontFamily="var(--font-mono)"
-            >
-              ${p >= 1000 ? p.toLocaleString(undefined, { maximumFractionDigits: 0 }) : p.toFixed(2)}
-            </text>
-          ))}
-
-          {/* Y-Axis labels — right (Z-score) */}
-          {([3, 0, -3] as number[]).map((z, i) => (
-            <text key={`lz-${i}`}
-              x={VW - PAD.right + 8}
-              y={getZYv(z) + 4}
-              textAnchor="start"
-              fill={i === 1 ? "var(--text-muted)" : "var(--accent-purple)"}
-              fontSize="9.5"
-              fontFamily="var(--font-mono)"
-            >
-              {z > 0 ? `+${z}` : z}.0 Z
-            </text>
-          ))}
-
-          {/* X-Axis timestamps */}
-          {chartData.map((d, i) => {
-            const labelStep = Math.max(1, Math.ceil(chartData.length / 8));
-            if (i % labelStep !== 0 && i !== chartData.length - 1) return null;
-            return (
-              <text key={`xt-${i}`}
-                x={getXv(i)}
-                y={VH - PAD.bottom + 16}
-                textAnchor="middle"
-                fill="var(--text-muted)"
-                fontSize="9"
-                fontFamily="var(--font-mono)"
-              >
-                {d.timestamp}
-              </text>
-            );
-          })}
-        </svg>
-      </div>
-
-      {/* ── Hover / Status Bar ───────────────────────────────────────────────── */}
-      <div
-        style={{
-          padding: "10px 14px",
-          backgroundColor: "var(--bg-secondary)",
-          borderRadius: "6px",
-          border: "1px solid var(--border-color)",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          fontSize: "12px",
-          minHeight: "44px",
-        }}
-      >
-        {hover ? (
-          <>
-            <div style={{ display: "flex", gap: "20px", alignItems: "center" }}>
-              <span className="font-mono" style={{ color: "var(--text-muted)" }}>
-                ⏱ {hover.timestamp}{hover.isInterpolated ? " ~" : ""}
-              </span>
-              <span>
-                Price:{" "}
-                <strong className="font-mono" style={{ color: "var(--accent-green)", fontSize: "13px" }}>
-                  ${hover.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </strong>
-                {hover.isInterpolated && (
-                  <span style={{ fontSize: "10px", color: "var(--text-muted)", marginLeft: "4px" }}>(interpolated)</span>
-                )}
-              </span>
-              <span>
-                Sentiment Z-Score:{" "}
-                <strong
-                  className="font-mono"
-                  style={{ color: hover.sentimentZ >= 0 ? "var(--accent-purple)" : "var(--accent-red)", fontSize: "13px" }}
-                >
-                  {hover.sentimentZ >= 0 ? `+${hover.sentimentZ.toFixed(4)}` : hover.sentimentZ.toFixed(4)}
-                </strong>
-              </span>
-            </div>
-            {hover.eventTitle && (
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span className="badge badge-cyan font-mono" style={{ fontSize: "10px" }}>EVENT</span>
-                <span style={{ color: "var(--text-primary)", fontStyle: "italic", fontSize: "11px" }}>
-                  &quot;{hover.eventTitle}&quot;
-                </span>
-              </div>
-            )}
-          </>
-        ) : (
-          <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
-            Hover anywhere on the chart to inspect price & sentiment values — interpolated between ticks.
-          </span>
-        )}
-      </div>
-    </div>
+      <div ref={containerRef} style={{ width: '100%', minHeight: 430 }} onClick={(event) => {
+        if (!chartRef.current || candles.length === 0) return;
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const x = event.clientX - rect.left;
+        const time = chartRef.current.timeScale().coordinateToTime(x);
+        if (time === null) return;
+        const price = candleRef.current?.coordinateToPrice(event.clientY - rect.top);
+        if (price === null || price === undefined) return;
+        const point = { time: time as UTCTimestamp, price: Number(price) };
+        if (!measurementStart) setMeasurementStart(point); else { setMeasurement({ start: measurementStart, end: point }); setMeasurementStart(null); }
+      }} />
+      {measurement && <div className="font-mono" style={{ padding: 10, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', fontSize: 11 }}><strong>MEASUREMENT</strong> · Change {formatSignedFigure(measuredChange!)} · Return {formatPercent(measuredReturn!)} · Duration {measuredDays} calendar days</div>}
+      {measurementStart && <div className="font-mono" style={{ color: COLORS.amber, fontSize: 11 }}>Ruler start selected. Click an end point on the chart.</div>}
+    </section>
   );
 }

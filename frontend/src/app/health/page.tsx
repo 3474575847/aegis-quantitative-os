@@ -1,6 +1,7 @@
-"use client";
+'use client';
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from 'react';
+import { apiUrl } from '@/lib/api';
 
 interface ServiceStatus {
   name: string;
@@ -35,26 +36,26 @@ export default function HealthPage() {
 
   const fetchHealth = async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/system/status");
+      const res = await fetch(apiUrl('/api/system/status'));
       if (res.ok) {
         const data = await res.json();
         setStatus(data);
       }
     } catch (e) {
-      console.error("Error fetching system status", e);
+      console.error('Error fetching system status', e);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 style={{ fontSize: "20px", fontWeight: "700", letterSpacing: "-0.5px" }}>
+          <h1 style={{ fontSize: '20px', fontWeight: '700', letterSpacing: '-0.5px' }}>
             Platform Infrastructure & Health
           </h1>
-          <p style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "4px" }}>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
             Real-time status of TimescaleDB, Redis, ingestion worker streams, and FastAPI runtime.
           </p>
         </div>
@@ -66,26 +67,27 @@ export default function HealthPage() {
       {/* Global Status Banner */}
       <div
         style={{
-          padding: "16px 20px",
-          backgroundColor: "var(--bg-card)",
-          border: "1px solid var(--border-color)",
-          borderRadius: "8px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
+          padding: '16px 20px',
+          backgroundColor: 'var(--bg-card)',
+          border: '1px solid var(--border-color)',
+          borderRadius: '8px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div className="status-pill online">
             <span className="status-dot"></span>
             <span>ALL SYSTEMS OPERATIONAL</span>
           </div>
-          <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
+          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
             Zero critical alerts detected in the last 24 hours.
           </span>
         </div>
-        <span className="font-mono" style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-          Heartbeat: {status?.timestamp ? new Date(status.timestamp).toLocaleTimeString() : "Polling..."}
+        <span className="font-mono" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+          Heartbeat:{' '}
+          {status?.timestamp ? new Date(status.timestamp).toLocaleTimeString() : 'Polling...'}
         </span>
       </div>
 
@@ -93,14 +95,14 @@ export default function HealthPage() {
       <div className="grid-4">
         {status?.services.map((svc) => (
           <div key={svc.name} className="card">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span className="card-title">{svc.name.replace("_", " ")}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span className="card-title">{svc.name.replace('_', ' ')}</span>
               <span className="badge badge-green font-mono">{svc.status}</span>
             </div>
-            <div className="card-value" style={{ fontSize: "18px", color: "var(--accent-cyan)" }}>
-              {svc.port ? `PORT :${svc.port}` : svc.mode || "ACTIVE"}
+            <div className="card-value" style={{ fontSize: '18px', color: 'var(--accent-cyan)' }}>
+              {svc.port ? `PORT :${svc.port}` : svc.mode || 'ACTIVE'}
             </div>
-            <span className="card-subtitle" style={{ color: "var(--accent-green)" }}>
+            <span className="card-subtitle" style={{ color: 'var(--accent-green)' }}>
               ● Responsive (0 errors)
             </span>
           </div>
@@ -110,7 +112,9 @@ export default function HealthPage() {
       {/* Storage and Hypertable Metrics */}
       <div className="table-container">
         <div className="table-header">
-          <span style={{ fontWeight: "600", fontSize: "13px" }}>TimescaleDB Hypertables & Table Statistics</span>
+          <span style={{ fontWeight: '600', fontSize: '13px' }}>
+            TimescaleDB Hypertables & Table Statistics
+          </span>
           <span className="badge badge-cyan font-mono">POSTGRES 16</span>
         </div>
         <table className="data-table">
@@ -125,49 +129,93 @@ export default function HealthPage() {
           </thead>
           <tbody>
             <tr>
-              <td style={{ fontWeight: "600", color: "var(--text-primary)" }}>signal_results</td>
-              <td><span className="badge badge-cyan font-mono">HYPERTABLE</span></td>
-              <td><span className="font-mono" style={{ fontSize: "12px" }}>timestamp (UTC)</span></td>
-              <td className="font-mono" style={{ fontWeight: "600", color: "var(--accent-green)" }}>
-                {status?.counts.signal_results ?? "—"}
+              <td style={{ fontWeight: '600', color: 'var(--text-primary)' }}>signal_results</td>
+              <td>
+                <span className="badge badge-cyan font-mono">HYPERTABLE</span>
               </td>
-              <td><span className="badge badge-green font-mono">ONLINE</span></td>
+              <td>
+                <span className="font-mono" style={{ fontSize: '12px' }}>
+                  timestamp (UTC)
+                </span>
+              </td>
+              <td className="font-mono" style={{ fontWeight: '600', color: 'var(--accent-green)' }}>
+                {status?.counts.signal_results ?? '—'}
+              </td>
+              <td>
+                <span className="badge badge-green font-mono">ONLINE</span>
+              </td>
             </tr>
             <tr>
-              <td style={{ fontWeight: "600", color: "var(--text-primary)" }}>event_log</td>
-              <td><span className="badge badge-cyan font-mono">HYPERTABLE</span></td>
-              <td><span className="font-mono" style={{ fontSize: "12px" }}>timestamp (UTC)</span></td>
-              <td className="font-mono" style={{ fontWeight: "600", color: "var(--accent-green)" }}>
-                {status?.counts.events_logged ?? "—"}
+              <td style={{ fontWeight: '600', color: 'var(--text-primary)' }}>event_log</td>
+              <td>
+                <span className="badge badge-cyan font-mono">HYPERTABLE</span>
               </td>
-              <td><span className="badge badge-green font-mono">ONLINE</span></td>
+              <td>
+                <span className="font-mono" style={{ fontSize: '12px' }}>
+                  timestamp (UTC)
+                </span>
+              </td>
+              <td className="font-mono" style={{ fontWeight: '600', color: 'var(--accent-green)' }}>
+                {status?.counts.events_logged ?? '—'}
+              </td>
+              <td>
+                <span className="badge badge-green font-mono">ONLINE</span>
+              </td>
             </tr>
             <tr>
-              <td style={{ fontWeight: "600", color: "var(--text-primary)" }}>signal_definitions</td>
-              <td><span className="badge badge-amber font-mono">RELATIONAL</span></td>
-              <td><span className="font-mono" style={{ fontSize: "12px" }}>id (UUIDv4)</span></td>
-              <td className="font-mono" style={{ fontWeight: "600" }}>
-                {status?.counts.signal_definitions ?? "—"}
+              <td style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
+                signal_definitions
               </td>
-              <td><span className="badge badge-green font-mono">ONLINE</span></td>
+              <td>
+                <span className="badge badge-amber font-mono">RELATIONAL</span>
+              </td>
+              <td>
+                <span className="font-mono" style={{ fontSize: '12px' }}>
+                  id (UUIDv4)
+                </span>
+              </td>
+              <td className="font-mono" style={{ fontWeight: '600' }}>
+                {status?.counts.signal_definitions ?? '—'}
+              </td>
+              <td>
+                <span className="badge badge-green font-mono">ONLINE</span>
+              </td>
             </tr>
             <tr>
-              <td style={{ fontWeight: "600", color: "var(--text-primary)" }}>experiment_definitions</td>
-              <td><span className="badge badge-amber font-mono">RELATIONAL</span></td>
-              <td><span className="font-mono" style={{ fontSize: "12px" }}>experiment_id (UUIDv4)</span></td>
-              <td className="font-mono" style={{ fontWeight: "600" }}>
-                {status?.counts.experiments ?? "—"}
+              <td style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
+                experiment_definitions
               </td>
-              <td><span className="badge badge-green font-mono">ONLINE</span></td>
+              <td>
+                <span className="badge badge-amber font-mono">RELATIONAL</span>
+              </td>
+              <td>
+                <span className="font-mono" style={{ fontSize: '12px' }}>
+                  experiment_id (UUIDv4)
+                </span>
+              </td>
+              <td className="font-mono" style={{ fontWeight: '600' }}>
+                {status?.counts.experiments ?? '—'}
+              </td>
+              <td>
+                <span className="badge badge-green font-mono">ONLINE</span>
+              </td>
             </tr>
             <tr>
-              <td style={{ fontWeight: "600", color: "var(--text-primary)" }}>experiment_runs</td>
-              <td><span className="badge badge-amber font-mono">RELATIONAL</span></td>
-              <td><span className="font-mono" style={{ fontSize: "12px" }}>run_id (UUIDv4)</span></td>
-              <td className="font-mono" style={{ fontWeight: "600" }}>
-                {status?.counts.experiment_runs ?? "—"}
+              <td style={{ fontWeight: '600', color: 'var(--text-primary)' }}>experiment_runs</td>
+              <td>
+                <span className="badge badge-amber font-mono">RELATIONAL</span>
               </td>
-              <td><span className="badge badge-green font-mono">ONLINE</span></td>
+              <td>
+                <span className="font-mono" style={{ fontSize: '12px' }}>
+                  run_id (UUIDv4)
+                </span>
+              </td>
+              <td className="font-mono" style={{ fontWeight: '600' }}>
+                {status?.counts.experiment_runs ?? '—'}
+              </td>
+              <td>
+                <span className="badge badge-green font-mono">ONLINE</span>
+              </td>
             </tr>
           </tbody>
         </table>

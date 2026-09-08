@@ -5,7 +5,7 @@ from typing import Any
 from aegis_storage.models.base import Base, SQLiteCompatibleARRAY, SQLiteCompatibleJSONB
 from sqlalchemy import DateTime, Index, String
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, synonym
 
 
 class ExperimentDefinitionRecord(Base):
@@ -13,6 +13,7 @@ class ExperimentDefinitionRecord(Base):
 
     __tablename__ = "experiment_definitions"
 
+    id = synonym("experiment_id")
     experiment_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, nullable=False
     )
@@ -33,20 +34,13 @@ class ExperimentDefinitionRecord(Base):
 
     __table_args__ = (Index("idx_experiment_definitions_name", "name"),)
 
-    @property
-    def id(self) -> uuid.UUID:
-        return self.experiment_id
-
-    @id.setter
-    def id(self, value: uuid.UUID) -> None:
-        self.experiment_id = value
-
 
 class ExperimentRunRecord(Base):
     """Persisted record of an experiment run."""
 
     __tablename__ = "experiment_runs"
 
+    id = synonym("run_id")
     run_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, nullable=False)
 
     experiment_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
@@ -65,10 +59,3 @@ class ExperimentRunRecord(Base):
         Index("idx_experiment_runs_status", "status"),
     )
 
-    @property
-    def id(self) -> uuid.UUID:
-        return self.run_id
-
-    @id.setter
-    def id(self, value: uuid.UUID) -> None:
-        self.run_id = value

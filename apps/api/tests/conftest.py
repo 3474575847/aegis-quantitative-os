@@ -12,6 +12,7 @@ NullPool ensures no connection reuse issues across test coroutines.
 import os
 import tempfile
 from collections.abc import AsyncGenerator
+from pathlib import Path
 
 import aegis_storage.models.events
 import aegis_storage.models.experimentation
@@ -59,10 +60,7 @@ async def sqlite_db_manager() -> AsyncGenerator[DatabaseManager, None]:
     yield manager
 
     await manager.engine.dispose()
-    try:
-        os.unlink(path)
-    except OSError:
-        pass
+    Path(path).unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +82,7 @@ async def patch_db_manager(sqlite_db_manager: DatabaseManager) -> AsyncGenerator
 # ---------------------------------------------------------------------------
 
 @pytest_asyncio.fixture
-async def async_client(patch_db_manager: None) -> AsyncGenerator[AsyncClient, None]:
+async def async_client() -> AsyncGenerator[AsyncClient, None]:
     """Async httpx client wired to the FastAPI app via ASGI."""
     from aegis_api.main import app
     async with AsyncClient(

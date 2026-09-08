@@ -4,6 +4,32 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
+import httpx
+import pandas as pd
+from aegis_events.bus import InMemoryEventBus
+from aegis_events.models import SensorRunCompleted
+from aegis_events.persistence import EventPersistenceHandler
+from aegis_observability.logger import get_logger
+from aegis_sensors.base import SensorConfig
+from aegis_sensors.market import MarketPriceSensor
+from aegis_sensors.reddit import RedditFinanceSensor
+from aegis_sensors.runner import SensorRunner
+from aegis_signals.engine import SignalPipelineEngine
+from aegis_signals.models import SignalDefinition
+from aegis_signals.processors import (
+    BtcMomentumProcessor,
+    MeanReversionProcessor,
+    RedditSentimentProcessor,
+)
+from aegis_storage.database import DatabaseManager
+from aegis_storage.models.events import EventLog
+from aegis_storage.models.signals import SignalDefinitionRecord
+from sqlalchemy import select
+
+from aegis_worker.macro_pipeline import MacroPipeline
+from aegis_worker.news_pipeline import NewsIngestionPipeline
+
+
 # Automatically discover and load .env file from repository root
 def _load_env_file() -> None:
     search_dirs = [Path.cwd(), Path(__file__).resolve().parent, Path(__file__).resolve().parents[3]]
@@ -24,28 +50,8 @@ def _load_env_file() -> None:
             except Exception:
                 pass
 
-_load_env_file()
 
-import httpx
-import pandas as pd
-from aegis_events.bus import InMemoryEventBus
-from aegis_events.models import SensorRunCompleted
-from aegis_events.persistence import EventPersistenceHandler
-from aegis_observability.logger import get_logger
-from aegis_sensors.base import SensorConfig
-from aegis_sensors.market import MarketPriceSensor
-from aegis_sensors.reddit import RedditFinanceSensor
-from aegis_sensors.runner import SensorRunner
-from aegis_signals.engine import SignalPipelineEngine
-from aegis_signals.models import SignalDefinition
-from aegis_signals.processors import (
-    BtcMomentumProcessor,
-    MeanReversionProcessor,
-    RedditSentimentProcessor,
-)
-from aegis_storage.database import DatabaseManager
-from aegis_storage.models.signals import SignalDefinitionRecord
-from sqlalchemy import select
+_load_env_file()
 
 logger = get_logger(__name__)
 
@@ -84,8 +90,47 @@ class FactorExecutionHandler:
             )
             signal_names = {"BTC_MOMENTUM_ZSCORE", "MEAN_REVERSION_PRICE"}
         elif event.source in ["REDDIT", "reddit_wallstreetbets"]:
-            scores = [e.get("data", {}).get("score", 0) for e in events_data]
-            frame = pd.DataFrame({"score": [float(sum(scores))]}, index=[now_ts])
+            current_score = sum(
+                float(e.get("data", {}).get("score", 0) or 0) for e in events_data
+            )
+            reddit_definition = next(
+                (record for record in definitions if record.name == "REDDIT_SENTIMENT_LEAD"),
+                None,
+            )
+            parameters = reddit_definition.parameters if reddit_definition else {}
+            window = max(1, int(parameters.get("window", parameters.get("lookback", 20))))
+            historical_scores: list[tuple[datetime, float]] = []
+            async for session in self.db_manager.get_session():
+                historical_events = list(
+                    (
+                        await session.execute(
+                            select(EventLog)
+                            .where(EventLog.source.in_(["REDDIT", "reddit_wallstreetbets"]))
+                            .where(EventLog.timestamp < event.timestamp)
+                            .order_by(EventLog.timestamp.desc())
+                            .limit(window)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+            for historical_event in reversed(historical_events):
+                historical_payload = historical_event.payload or {}
+                historical_events_data = historical_payload.get("events", [])
+                historical_scores.append(
+                    (
+                        historical_event.timestamp,
+                        sum(
+                            float(item.get("data", {}).get("score", 0) or 0)
+                            for item in historical_events_data
+                        ),
+                    )
+                )
+            observations = historical_scores + [(event.timestamp, current_score)]
+            frame = pd.DataFrame(
+                {"score": [score for _, score in observations]},
+                index=[timestamp for timestamp, _ in observations],
+            )
             signal_names = {"REDDIT_SENTIMENT_LEAD"}
         else:
             return
@@ -154,21 +199,65 @@ async def main() -> None:
         mock_path=str(reddit_mock_path),
     )
 
+    # News ingestion pipeline (runs every 5 minutes, independent of sensor cycle)
+    news_pipeline = NewsIngestionPipeline(db_manager)
+    news_interval_seconds = int(os.getenv("NEWS_INGESTION_INTERVAL", "300"))
+
+    # Macro ingestion pipeline (runs every 60 minutes — FRED data is daily)
+    macro_pipeline = MacroPipeline(db_manager)
+    macro_interval_seconds = int(os.getenv("MACRO_INGESTION_INTERVAL", "3600"))
+    async def macro_ingestion_loop() -> None:
+        """Scheduled FRED macro ingest: fetch 6 series → upsert on interval."""
+        while True:
+            try:
+                stats = await macro_pipeline.run_cycle()
+                logger.info(
+                    "Macro pipeline cycle: fetched=%d new_rows=%d",
+                    stats["fetched"],
+                    stats["new_rows"],
+                )
+            except Exception as exc:
+                logger.error("Macro ingestion cycle failed: %s", exc)
+            await asyncio.sleep(macro_interval_seconds)
+
+    async def news_ingestion_loop() -> None:
+        """Scheduled news ingestion: fetch → deduplicate → persist on interval."""
+        while True:
+            try:
+                stats = await news_pipeline.run_cycle()
+                logger.info(
+                    "News pipeline cycle: fetched=%d saved_raw=%d new_clusters=%d",
+                    stats["fetched"],
+                    stats["saved_raw"],
+                    stats["new_clusters"],
+                )
+            except Exception as exc:
+                logger.error("News ingestion cycle failed: %s", exc)
+            await asyncio.sleep(news_interval_seconds)
+
     async with httpx.AsyncClient(timeout=10.0) as client:
         market_sensor = MarketPriceSensor(market_config, client=client)
         reddit_sensor = RedditFinanceSensor(reddit_config, client=client)
 
         runner = SensorRunner(sensors=[market_sensor, reddit_sensor], publisher=event_bus)
 
-        while True:
-            try:
-                logger.info("Executing Synchronized Ingestion Cycle...")
-                await runner.run_once()
-                logger.info("Synchronized ingestion cycle complete.")
-            except Exception as e:
-                logger.error(f"Ingestion cycle failed: {e}")
+        # Launch news ingestion concurrently with the market/sentiment sensor cycle
+        news_task = asyncio.create_task(news_ingestion_loop())
+        macro_task = asyncio.create_task(macro_ingestion_loop())
 
-            await asyncio.sleep(10)
+        try:
+            while True:
+                try:
+                    logger.info("Executing Synchronized Ingestion Cycle...")
+                    await runner.run_once()
+                    logger.info("Synchronized ingestion cycle complete.")
+                except Exception as e:
+                    logger.error(f"Ingestion cycle failed: {e}")
+
+                await asyncio.sleep(10)
+        finally:
+            news_task.cancel()
+            macro_task.cancel()
 
 
 if __name__ == "__main__":

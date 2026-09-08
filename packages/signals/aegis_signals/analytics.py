@@ -1,6 +1,25 @@
 import pandas as pd
 
 
+def point_in_time_zscore(
+    data: pd.Series,
+    window: int = 20,
+    min_history: int = 5,
+    ddof: int = 0,
+) -> pd.Series:
+    """Normalize each observation against only its preceding observations.
+
+    Values without enough prior history, or with zero historical variance, are
+    returned as NaN so callers cannot mistake an unavailable score for neutral.
+    """
+    window = max(1, int(window))
+    min_history = max(1, min(int(min_history), window))
+    history = data.shift(1)
+    mean = history.rolling(window=window, min_periods=min_history).mean()
+    std = history.rolling(window=window, min_periods=min_history).std(ddof=ddof)
+    return (data - mean).where(std > 0) / std.where(std > 0)
+
+
 def rolling_mean(data: pd.Series, window: int) -> pd.Series:
     """Compute deterministic rolling mean."""
     return data.rolling(window=window).mean()

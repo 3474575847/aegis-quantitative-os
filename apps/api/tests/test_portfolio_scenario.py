@@ -113,12 +113,14 @@ class TestPortfolioScenarioProvenance:
         async def mock_get_ticker(symbol: str) -> MarketTickerResponse:
             return quotes[symbol.upper()]
 
-        with patch("aegis_api.main.get_market_ticker", side_effect=mock_get_ticker):
-            with TestClient(app) as client:
-                resp = client.post(
-                    "/api/portfolio/scenario",
-                    json={"holdings": {"AAPL": 0.6, "NVDA": 0.4}, "shocks": {}},
-                )
+        with (
+            patch("aegis_api.main.get_market_ticker", side_effect=mock_get_ticker),
+            TestClient(app) as client,
+        ):
+            resp = client.post(
+                "/api/portfolio/scenario",
+                json={"holdings": {"AAPL": 0.6, "NVDA": 0.4}, "shocks": {}},
+            )
 
         assert resp.status_code == 200
         data = resp.json()
@@ -138,12 +140,14 @@ class TestPortfolioScenarioProvenance:
         async def mock_get_ticker(symbol: str) -> MarketTickerResponse:
             return quotes[symbol.upper()]
 
-        with patch("aegis_api.main.get_market_ticker", side_effect=mock_get_ticker):
-            with TestClient(app) as client:
-                resp = client.post(
-                    "/api/portfolio/scenario",
-                    json={"holdings": {"AAPL": 0.5, "BTC": 0.5}, "shocks": {}},
-                )
+        with (
+            patch("aegis_api.main.get_market_ticker", side_effect=mock_get_ticker),
+            TestClient(app) as client,
+        ):
+            resp = client.post(
+                "/api/portfolio/scenario",
+                json={"holdings": {"AAPL": 0.5, "BTC": 0.5}, "shocks": {}},
+            )
 
         assert resp.status_code == 200
         data = resp.json()
@@ -157,12 +161,14 @@ class TestPortfolioScenarioProvenance:
                 return _live_quote("BTC", 65000.0)
             return _fallback_quote(symbol.upper(), 200.0, "Yahoo Finance fallback")
 
-        with patch("aegis_api.main.get_market_ticker", side_effect=mock_get_ticker):
-            with TestClient(app) as client:
-                resp = client.post(
-                    "/api/portfolio/scenario",
-                    json={"holdings": {"BTC": 0.4, "AAPL": 0.6}, "shocks": {}},
-                )
+        with (
+            patch("aegis_api.main.get_market_ticker", side_effect=mock_get_ticker),
+            TestClient(app) as client,
+        ):
+            resp = client.post(
+                "/api/portfolio/scenario",
+                json={"holdings": {"BTC": 0.4, "AAPL": 0.6}, "shocks": {}},
+            )
 
         assert resp.status_code == 200
         holdings = {h["symbol"]: h for h in resp.json()["holdings"]}
@@ -182,15 +188,17 @@ class TestPortfolioScenarioCalculation:
         async def mock_get_ticker(symbol: str) -> MarketTickerResponse:
             return _live_quote(symbol.upper(), 100.0)
 
-        with patch("aegis_api.main.get_market_ticker", side_effect=mock_get_ticker):
-            with TestClient(app) as client:
-                resp = client.post(
-                    "/api/portfolio/scenario",
-                    json={
-                        "holdings": {"AAPL": 0.5, "BTC": 0.5},
-                        "shocks": {"AAPL": -0.10, "BTC": 0.20},
-                    },
-                )
+        with (
+            patch("aegis_api.main.get_market_ticker", side_effect=mock_get_ticker),
+            TestClient(app) as client,
+        ):
+            resp = client.post(
+                "/api/portfolio/scenario",
+                json={
+                    "holdings": {"AAPL": 0.5, "BTC": 0.5},
+                    "shocks": {"AAPL": -0.10, "BTC": 0.20},
+                },
+            )
 
         assert resp.status_code == 200
         data = resp.json()
@@ -200,12 +208,14 @@ class TestPortfolioScenarioCalculation:
         async def mock_get_ticker(symbol: str) -> MarketTickerResponse:
             return _live_quote(symbol.upper(), 200.0)
 
-        with patch("aegis_api.main.get_market_ticker", side_effect=mock_get_ticker):
-            with TestClient(app) as client:
-                resp = client.post(
-                    "/api/portfolio/scenario",
-                    json={"holdings": {"AAPL": 0.5, "NVDA": 0.5}, "shocks": {}},
-                )
+        with (
+            patch("aegis_api.main.get_market_ticker", side_effect=mock_get_ticker),
+            TestClient(app) as client,
+        ):
+            resp = client.post(
+                "/api/portfolio/scenario",
+                json={"holdings": {"AAPL": 0.5, "NVDA": 0.5}, "shocks": {}},
+            )
 
         assert resp.status_code == 200
         assert resp.json()["weighted_shock"] == 0.0
@@ -215,12 +225,14 @@ class TestPortfolioScenarioCalculation:
         async def mock_get_ticker(symbol: str) -> MarketTickerResponse:
             return _live_quote(symbol.upper(), 500.0)
 
-        with patch("aegis_api.main.get_market_ticker", side_effect=mock_get_ticker):
-            with TestClient(app) as client:
-                resp = client.post(
-                    "/api/portfolio/scenario",
-                    json={"holdings": {"NVDA": 1.0}, "shocks": {"NVDA": -0.30}},
-                )
+        with (
+            patch("aegis_api.main.get_market_ticker", side_effect=mock_get_ticker),
+            TestClient(app) as client,
+        ):
+            resp = client.post(
+                "/api/portfolio/scenario",
+                json={"holdings": {"NVDA": 1.0}, "shocks": {"NVDA": -0.30}},
+            )
 
         assert resp.status_code == 200
         assert abs(resp.json()["weighted_shock"] - (-0.30)) < 1e-6
@@ -230,30 +242,34 @@ class TestPortfolioScenarioCalculation:
         async def mock_get_ticker(symbol: str) -> MarketTickerResponse:
             return _live_quote(symbol.upper(), 100.0)
 
-        with patch("aegis_api.main.get_market_ticker", side_effect=mock_get_ticker):
-            with TestClient(app) as client:
-                resp = client.post(
-                    "/api/portfolio/scenario",
-                    json={
-                        "holdings": {"AAPL": 1.0},
-                        "shocks": {"AAPL": 0.05, "TSLA": -0.50},  # TSLA not in holdings
-                    },
-                )
+        with (
+            patch("aegis_api.main.get_market_ticker", side_effect=mock_get_ticker),
+            TestClient(app) as client,
+        ):
+            resp = client.post(
+                "/api/portfolio/scenario",
+                json={
+                    "holdings": {"AAPL": 1.0},
+                    "shocks": {"AAPL": 0.05, "TSLA": -0.50},  # TSLA not in holdings
+                },
+            )
 
         assert resp.status_code == 200
-        # Only AAPL shock matters: 1.0 × 0.05 = 0.05
+        # Only AAPL shock matters: 1.0 x 0.05 = 0.05
         assert abs(resp.json()["weighted_shock"] - 0.05) < 1e-6
 
     def test_response_contains_methodology_string(self) -> None:
         async def mock_get_ticker(symbol: str) -> MarketTickerResponse:
             return _live_quote(symbol.upper(), 100.0)
 
-        with patch("aegis_api.main.get_market_ticker", side_effect=mock_get_ticker):
-            with TestClient(app) as client:
-                resp = client.post(
-                    "/api/portfolio/scenario",
-                    json={"holdings": {"AAPL": 1.0}, "shocks": {}},
-                )
+        with (
+            patch("aegis_api.main.get_market_ticker", side_effect=mock_get_ticker),
+            TestClient(app) as client,
+        ):
+            resp = client.post(
+                "/api/portfolio/scenario",
+                json={"holdings": {"AAPL": 1.0}, "shocks": {}},
+            )
 
         assert resp.status_code == 200
         assert "methodology" in resp.json()

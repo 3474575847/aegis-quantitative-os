@@ -1,6 +1,12 @@
 import asyncio
+import os
 from logging.config import fileConfig
 
+import aegis_storage.models.events  # noqa: F401
+import aegis_storage.models.experimentation  # noqa: F401
+import aegis_storage.models.macro  # noqa: F401
+import aegis_storage.models.news  # noqa: F401
+import aegis_storage.models.signals  # noqa: F401
 from aegis_storage.models.base import Base
 from alembic import context
 from sqlalchemy import pool
@@ -8,6 +14,10 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 config = context.config
+
+database_url = os.getenv("DATABASE_URL")
+if database_url:
+    config.set_main_option("sqlalchemy.url", database_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

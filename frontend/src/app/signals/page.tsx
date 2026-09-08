@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import SentimentPriceChart, { ChartDatapoint } from "../components/SentimentPriceChart";
+import { apiUrl, formatFigure, formatSignedFigure } from '@/lib/api';
 
 interface SignalItem {
   id: string;
@@ -55,7 +56,7 @@ export default function SignalsPage() {
     try {
       setLoading(true);
       setApiError(null);
-      const res = await fetch("http://localhost:8000/api/signals");
+      const res = await fetch(apiUrl("/api/signals"));
       if (res.ok) {
         const data = await res.json();
         setSignals(data);
@@ -76,7 +77,7 @@ export default function SignalsPage() {
   const selectSignal = async (sig: SignalItem) => {
     setSelectedSignal(sig);
     try {
-      const res = await fetch(`http://localhost:8000/api/signals/${sig.id}/history?limit=60`);
+      const res = await fetch(apiUrl(`/api/signals/${sig.id}/history?limit=60`));
       if (res.ok) {
         const histData = await res.json();
         setHistory(histData);
@@ -107,17 +108,25 @@ export default function SignalsPage() {
     setQuoteLoading(true);
     try {
       // 1. Fetch live quote metadata
-      const resQuote = await fetchWithRetry(`http://localhost:8000/api/market/ticker/${cleanSym}`);
+      const resQuote = await fetchWithRetry(apiUrl(`/api/market/ticker/${cleanSym}`));
       if (resQuote.ok) {
         const q = await resQuote.json();
         setActiveQuote(q);
       }
 
       // 2. Fetch per-ticker history — chart re-renders with unique shape for each symbol
-      const resHist = await fetchWithRetry(`http://localhost:8000/api/market/ticker/${cleanSym}/history`);
+      const resHist = await fetchWithRetry(apiUrl(`/api/market/ticker/${cleanSym}/history`));
       if (resHist.ok) {
         const hData = await resHist.json();
-        setTickerHistory(hData.datapoints || []);
+        let datapoints = hData.datapoints || [];
+        const isEquity = !['BTC', 'ETH', 'SOL', 'DOGE'].includes(cleanSym.replace('-USD', ''));
+        if (datapoints.length === 0 && isEquity) {
+          const fallback = await fetch(`/api/market-history/${encodeURIComponent(cleanSym)}`);
+          if (fallback.ok) {
+            datapoints = (await fallback.json()).datapoints || [];
+          }
+        }
+        setTickerHistory(datapoints);
       }
     } catch (e) {
       setApiError("Market quote fetch failed — API may be temporarily unavailable.");
@@ -272,7 +281,7 @@ export default function SignalsPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
               <span className="card-title">Live Spot Price</span>
               <span className="card-value font-mono" style={{ fontSize: "24px", color: "var(--accent-green)", fontWeight: "800" }}>
-                ${activeQuote.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ${formatFigure(activeQuote.price)}
               </span>
               <span className="card-subtitle" style={{ color: "var(--accent-green)", fontSize: "11px", fontWeight: "600" }}>
                 ● {activeQuote.exchange}
@@ -282,7 +291,7 @@ export default function SignalsPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
               <span className="card-title">Quant Signal Rating</span>
               <span className="card-value font-mono" style={{ fontSize: "22px", color: "var(--accent-cyan)", fontWeight: "800" }}>
-                {activeQuote.z_score_signal > 0 ? `+${activeQuote.z_score_signal.toFixed(4)}` : activeQuote.z_score_signal.toFixed(4)} Z
+                {formatSignedFigure(activeQuote.z_score_signal)} Z
               </span>
               <span className="card-subtitle" style={{ fontSize: "11px", fontWeight: "600" }}>
                 {activeQuote.z_score_signal > 0.3 ? "BULLISH MOMENTUM" : "NEUTRAL"}
@@ -392,7 +401,7 @@ export default function SignalsPage() {
                       <td className="font-mono">
                         {sig.latest_value !== null ? (
                           <span style={{ color: sig.latest_value >= 0 ? "var(--accent-green)" : "var(--accent-red)", fontWeight: "600" }}>
-                            {sig.latest_value > 0 ? `+${sig.latest_value.toFixed(4)}` : sig.latest_value.toFixed(4)}
+                            {formatSignedFigure(sig.latest_value)}
                           </span>
                         ) : (
                           <span style={{ color: "var(--text-muted)" }}>N/A</span>
@@ -468,7 +477,7 @@ export default function SignalsPage() {
                       return (
                         <div
                           key={idx}
-                          title={`Time: ${new Date(pt.timestamp).toLocaleTimeString()}\nSignal Value: ${pt.value.toFixed(4)}\nSpot Price: $${pt.metadata?.live_spot_price || 'N/A'}`}
+                          title={`Time: ${new Date(pt.timestamp).toLocaleTimeString()}\nSignal Value: ${formatFigure(pt.value)}\nSpot Price: $${pt.metadata?.live_spot_price || 'N/A'}`}
                           style={{
                             flex: 1,
                             height: `${normalizedHeight}%`,

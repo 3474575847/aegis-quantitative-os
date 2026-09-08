@@ -2,7 +2,7 @@ from typing import Any
 
 import pandas as pd
 
-from aegis_signals.analytics import rolling_mean
+from aegis_signals.analytics import point_in_time_zscore, rolling_mean
 from aegis_signals.engine import BaseSignalProcessor
 
 
@@ -23,7 +23,13 @@ class MeanReversionProcessor(BaseSignalProcessor):
 
 class RedditSentimentProcessor(BaseSignalProcessor):
     def compute(self, df: pd.DataFrame, params: dict[str, Any]) -> pd.Series:
-        score = df["score"].astype(float)
-        center = float(params.get("center_score", 750.0))
-        scale = float(params.get("scale", 400.0))
-        return ((score - center) / scale).clip(-3.0, 3.0)
+        score = pd.to_numeric(df["score"], errors="coerce").fillna(0.0)
+        window = max(1, int(params.get("window", params.get("lookback", 20))))
+        min_history = max(1, int(params.get("min_history", min(5, window))))
+        zscore = point_in_time_zscore(score, window, min_history, ddof=0)
+        if "clip" in params and params["clip"] is not None:
+            clip = float(params["clip"])
+            if clip <= 0:
+                raise ValueError("clip must be positive when configured")
+            zscore = zscore.clip(-clip, clip)
+        return zscore

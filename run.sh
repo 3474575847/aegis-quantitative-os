@@ -44,9 +44,11 @@ else
   echo -e "${GREEN}Database is healthy and ready.${NC}"
 fi
 
-# 2. Check/Run Seed Data
-echo -e "\n${YELLOW}[2/4] Initializing Database & Seed Data...${NC}"
-uv run python seed.py || true
+# 2. Apply versioned schema and seed data
+echo -e "\n${YELLOW}[2/4] Applying Database Migrations & Seed Data...${NC}"
+DATABASE_URL="${DATABASE_URL:-postgresql+asyncpg://postgres:postgres@localhost:5432/aegis}" \
+  uv run --package aegis-storage alembic -c packages/storage/alembic.ini upgrade head
+uv run python seed.py
 
 # Process management for background services
 PIDS=()

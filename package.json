@@ -5,6 +5,7 @@
     "node": ">=20.0.0"
   },
   "scripts": {
+    "dev": "pnpm --filter aegis-frontend dev",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
@@ -12,5 +13,11 @@
     "eslint": "^9.0.0",
     "prettier": "^3.0.0",
     "typescript": "^5.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "sharp",
+      "unrs-resolver"
+    ]
   }
 }

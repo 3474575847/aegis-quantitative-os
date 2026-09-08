@@ -1,4 +1,5 @@
 import logging
+import math
 import time
 from abc import ABC, abstractmethod
 from typing import Any
@@ -86,6 +87,13 @@ class SignalPipelineEngine:
 
             latest_timestamp = series.index[-1]
             latest_value = float(series.iloc[-1])
+            if not math.isfinite(latest_value):
+                logger.info(
+                    "Skipping unavailable signal value: %s at %s",
+                    definition.name,
+                    latest_timestamp,
+                )
+                return None
 
             result = SignalResult(
                 run_id=run.run_id,

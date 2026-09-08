@@ -1,11 +1,12 @@
-"use client";
+'use client';
 
-import { useState } from "react";
+import { useState } from 'react';
+import { apiUrl, formatFigure, formatPercent } from '@/lib/api';
 
 interface HoldingRow {
   symbol: string;
   weight: string; // string for controlled input, validated on submit
-  shock: string;  // percent string, e.g. "-10" means -10%
+  shock: string; // percent string, e.g. "-10" means -10%
 }
 
 interface HoldingResult {
@@ -26,9 +27,9 @@ interface ScenarioResult {
 }
 
 const DEFAULT_HOLDINGS: HoldingRow[] = [
-  { symbol: "AAPL", weight: "0.40", shock: "-10" },
-  { symbol: "NVDA", weight: "0.35", shock: "-15" },
-  { symbol: "BTC",  weight: "0.25", shock: "20" },
+  { symbol: 'AAPL', weight: '0.40', shock: '-10' },
+  { symbol: 'NVDA', weight: '0.35', shock: '-15' },
+  { symbol: 'BTC', weight: '0.25', shock: '20' },
 ];
 
 function weightSum(rows: HoldingRow[]): number {
@@ -36,15 +37,15 @@ function weightSum(rows: HoldingRow[]): number {
 }
 
 function validateHoldings(rows: HoldingRow[]): string | null {
-  if (rows.length === 0) return "Add at least one holding.";
+  if (rows.length === 0) return 'Add at least one holding.';
   for (const row of rows) {
-    if (!row.symbol.trim()) return "All holdings must have a symbol.";
+    if (!row.symbol.trim()) return 'All holdings must have a symbol.';
     const w = parseFloat(row.weight);
     if (isNaN(w) || w < 0) return `Weight for ${row.symbol} must be a non-negative number.`;
   }
   const total = weightSum(rows);
   if (Math.abs(total - 1.0) > 0.001) {
-    return `Weights must sum to 1.000 (currently ${total.toFixed(3)}).`;
+    return `Weights must sum to 1.000 (currently ${formatFigure(total)}).`;
   }
   return null;
 }
@@ -59,13 +60,16 @@ export default function PortfolioPage() {
   function updateHolding(index: number, field: keyof HoldingRow, value: string) {
     setHoldings((prev) => {
       const next = [...prev];
-      next[index] = { ...next[index], [field]: value.toUpperCase ? (field === "symbol" ? value.toUpperCase() : value) : value };
+      next[index] = {
+        ...next[index],
+        [field]: value.toUpperCase ? (field === 'symbol' ? value.toUpperCase() : value) : value,
+      };
       return next;
     });
   }
 
   function addHolding() {
-    setHoldings((prev) => [...prev, { symbol: "", weight: "0.00", shock: "0" }]);
+    setHoldings((prev) => [...prev, { symbol: '', weight: '0.00', shock: '0' }]);
   }
 
   function removeHolding(index: number) {
@@ -79,7 +83,7 @@ export default function PortfolioPage() {
       prev.map((row) => ({
         ...row,
         weight: (Math.round(((parseFloat(row.weight) || 0) / total) * 10000) / 10000).toFixed(4),
-      }))
+      })),
     );
   }
 
@@ -93,7 +97,7 @@ export default function PortfolioPage() {
     }
 
     setRunning(true);
-    setMessage("Fetching provider-backed quotes and calculating scenario exposure...");
+    setMessage('Fetching provider-backed quotes and calculating scenario exposure...');
 
     const holdingsPayload: Record<string, number> = {};
     const shocksPayload: Record<string, number> = {};
@@ -105,18 +109,18 @@ export default function PortfolioPage() {
     }
 
     try {
-      const response = await fetch("http://localhost:8000/api/portfolio/scenario", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const response = await fetch(apiUrl('/api/portfolio/scenario'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ holdings: holdingsPayload, shocks: shocksPayload }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "Scenario unavailable");
+      if (!response.ok) throw new Error(data.detail || 'Scenario unavailable');
       setResult(data);
       setMessage(data.methodology);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Scenario unavailable.");
+      setError(err instanceof Error ? err.message : 'Scenario unavailable.');
       setMessage(null);
     } finally {
       setRunning(false);
@@ -127,11 +131,11 @@ export default function PortfolioPage() {
   const weightOk = Math.abs(weightTotal - 1.0) <= 0.001;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <header>
         <p className="card-title">Portfolio Lab / Scenario Analysis</p>
-        <h1 style={{ fontSize: "26px", marginTop: "6px" }}>Stress test a research portfolio</h1>
-        <p style={{ color: "var(--text-muted)", marginTop: "6px", maxWidth: "760px" }}>
+        <h1 style={{ fontSize: '26px', marginTop: '6px' }}>Stress test a research portfolio</h1>
+        <p style={{ color: 'var(--text-muted)', marginTop: '6px', maxWidth: '760px' }}>
           Enter holdings and percentage shocks. Prices are fetched live from market providers.
           Weighted impact is the sum of (weight × shock) across all holdings. This is a research
           tool — not an execution engine.
@@ -140,24 +144,31 @@ export default function PortfolioPage() {
 
       {/* Holdings Editor */}
       <section className="card">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: '16px',
+          }}
+        >
           <span className="card-title">Holdings</span>
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <span
               style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: "12px",
-                color: weightOk ? "var(--accent-green)" : "var(--accent-amber)",
+                fontFamily: 'var(--font-mono)',
+                fontSize: '12px',
+                color: weightOk ? 'var(--accent-green)' : 'var(--accent-amber)',
               }}
             >
-              Σ weights = {weightTotal.toFixed(4)}
+              Σ weights = {formatFigure(weightTotal)}
             </span>
             <button
               type="button"
               className="btn btn-secondary"
               onClick={normalizeWeights}
               title="Rescale all weights to sum to 1.0"
-              style={{ fontSize: "11px", padding: "4px 10px" }}
+              style={{ fontSize: '11px', padding: '4px 10px' }}
             >
               Normalize
             </button>
@@ -165,21 +176,21 @@ export default function PortfolioPage() {
               type="button"
               className="btn btn-secondary"
               onClick={addHolding}
-              style={{ fontSize: "11px", padding: "4px 10px" }}
+              style={{ fontSize: '11px', padding: '4px 10px' }}
             >
               + Add
             </button>
           </div>
         </div>
 
-        <div className="table-container" style={{ border: "none" }}>
+        <div className="table-container" style={{ border: 'none' }}>
           <table className="data-table">
             <thead>
               <tr>
                 <th>Symbol</th>
                 <th>Weight (0–1)</th>
                 <th>Scenario shock (%)</th>
-                <th style={{ width: "40px" }}></th>
+                <th style={{ width: '40px' }}></th>
               </tr>
             </thead>
             <tbody>
@@ -188,17 +199,17 @@ export default function PortfolioPage() {
                   <td>
                     <input
                       value={row.symbol}
-                      onChange={(e) => updateHolding(i, "symbol", e.target.value.toUpperCase())}
+                      onChange={(e) => updateHolding(i, 'symbol', e.target.value.toUpperCase())}
                       placeholder="e.g. AAPL"
                       style={{
-                        background: "transparent",
-                        border: "1px solid var(--border-color)",
-                        borderRadius: "4px",
-                        color: "var(--text-primary)",
-                        fontFamily: "var(--font-mono)",
-                        fontSize: "13px",
-                        padding: "4px 8px",
-                        width: "90px",
+                        background: 'transparent',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '4px',
+                        color: 'var(--text-primary)',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '13px',
+                        padding: '4px 8px',
+                        width: '90px',
                       }}
                     />
                   </td>
@@ -209,44 +220,44 @@ export default function PortfolioPage() {
                       min="0"
                       max="1"
                       value={row.weight}
-                      onChange={(e) => updateHolding(i, "weight", e.target.value)}
+                      onChange={(e) => updateHolding(i, 'weight', e.target.value)}
                       style={{
-                        background: "transparent",
-                        border: "1px solid var(--border-color)",
-                        borderRadius: "4px",
-                        color: "var(--text-primary)",
-                        fontFamily: "var(--font-mono)",
-                        fontSize: "13px",
-                        padding: "4px 8px",
-                        width: "90px",
+                        background: 'transparent',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '4px',
+                        color: 'var(--text-primary)',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '13px',
+                        padding: '4px 8px',
+                        width: '90px',
                       }}
                     />
                   </td>
                   <td>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <input
                         type="number"
                         step="1"
                         value={row.shock}
-                        onChange={(e) => updateHolding(i, "shock", e.target.value)}
+                        onChange={(e) => updateHolding(i, 'shock', e.target.value)}
                         placeholder="0"
                         style={{
-                          background: "transparent",
-                          border: "1px solid var(--border-color)",
-                          borderRadius: "4px",
+                          background: 'transparent',
+                          border: '1px solid var(--border-color)',
+                          borderRadius: '4px',
                           color:
                             parseFloat(row.shock) > 0
-                              ? "var(--accent-green)"
+                              ? 'var(--accent-green)'
                               : parseFloat(row.shock) < 0
-                              ? "var(--accent-red)"
-                              : "var(--text-secondary)",
-                          fontFamily: "var(--font-mono)",
-                          fontSize: "13px",
-                          padding: "4px 8px",
-                          width: "80px",
+                                ? 'var(--accent-red)'
+                                : 'var(--text-secondary)',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: '13px',
+                          padding: '4px 8px',
+                          width: '80px',
                         }}
                       />
-                      <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>%</span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>%</span>
                     </div>
                   </td>
                   <td>
@@ -254,12 +265,12 @@ export default function PortfolioPage() {
                       type="button"
                       onClick={() => removeHolding(i)}
                       style={{
-                        background: "none",
-                        border: "none",
-                        color: "var(--text-muted)",
-                        cursor: "pointer",
-                        fontSize: "14px",
-                        padding: "4px",
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        padding: '4px',
                       }}
                       title="Remove holding"
                     >
@@ -273,22 +284,22 @@ export default function PortfolioPage() {
         </div>
 
         {error && (
-          <p style={{ color: "var(--accent-amber)", fontSize: "12px", marginTop: "12px" }}>
+          <p style={{ color: 'var(--accent-amber)', fontSize: '12px', marginTop: '12px' }}>
             ⚠ {error}
           </p>
         )}
 
-        <div style={{ display: "flex", gap: "12px", alignItems: "center", marginTop: "16px" }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '16px' }}>
           <button
             type="button"
             className="btn btn-primary"
             onClick={runScenario}
             disabled={running}
           >
-            {running ? "Calculating..." : "Run scenario"}
+            {running ? 'Calculating...' : 'Run scenario'}
           </button>
           {message && !error && (
-            <p style={{ color: "var(--text-muted)", fontSize: "12px" }}>{message}</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '12px' }}>{message}</p>
           )}
         </div>
       </section>
@@ -304,14 +315,14 @@ export default function PortfolioPage() {
                 style={{
                   color:
                     result.weighted_shock > 0
-                      ? "var(--accent-green)"
+                      ? 'var(--accent-green)'
                       : result.weighted_shock < 0
-                      ? "var(--accent-red)"
-                      : "var(--text-primary)",
+                        ? 'var(--accent-red)'
+                        : 'var(--text-primary)',
                 }}
               >
-                {result.weighted_shock >= 0 ? "+" : ""}
-                {(result.weighted_shock * 100).toFixed(2)}%
+                {result.weighted_shock >= 0 ? '+' : ''}
+                {formatPercent(result.weighted_shock)}
               </strong>
               <span className="card-subtitle">Σ(weight × shock)</span>
             </div>
@@ -320,7 +331,7 @@ export default function PortfolioPage() {
               <strong className="card-value">{result.holdings.length}</strong>
               <span className="card-subtitle">
                 {result.holdings.filter((h) => h.is_fallback).length} fallback
-                {" · "}
+                {' · '}
                 {result.holdings.filter((h) => !h.is_fallback).length} live
               </span>
             </div>
@@ -334,13 +345,12 @@ export default function PortfolioPage() {
               <strong
                 className="card-value"
                 style={{
-                  color:
-                    result.holdings.every((h) => !h.is_fallback)
-                      ? "var(--accent-green)"
-                      : "var(--accent-amber)",
+                  color: result.holdings.every((h) => !h.is_fallback)
+                    ? 'var(--accent-green)'
+                    : 'var(--accent-amber)',
                 }}
               >
-                {result.holdings.every((h) => !h.is_fallback) ? "ALL LIVE" : "PARTIAL FALLBACK"}
+                {result.holdings.every((h) => !h.is_fallback) ? 'ALL LIVE' : 'PARTIAL FALLBACK'}
               </strong>
               <span className="card-subtitle">Quote provenance</span>
             </div>
@@ -369,57 +379,57 @@ export default function PortfolioPage() {
                   const contribution = holding.weight * holding.scenario_shock;
                   return (
                     <tr key={holding.symbol}>
-                      <td style={{ fontFamily: "var(--font-mono)", fontWeight: 600 }}>
+                      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
                         {holding.symbol}
                       </td>
+                      <td className="font-mono">{formatPercent(holding.weight)}</td>
                       <td className="font-mono">
-                        {(holding.weight * 100).toFixed(1)}%
-                      </td>
-                      <td className="font-mono">
-                        ${holding.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                        ${formatFigure(holding.price)}
                       </td>
                       <td
                         className="font-mono"
                         style={{
                           color:
                             holding.scenario_shock > 0
-                              ? "var(--accent-green)"
+                              ? 'var(--accent-green)'
                               : holding.scenario_shock < 0
-                              ? "var(--accent-red)"
-                              : "var(--text-secondary)",
+                                ? 'var(--accent-red)'
+                                : 'var(--text-secondary)',
                         }}
                       >
-                        {holding.scenario_shock >= 0 ? "+" : ""}
-                        {(holding.scenario_shock * 100).toFixed(1)}%
+                        {holding.scenario_shock >= 0 ? '+' : ''}
+                        {formatPercent(holding.scenario_shock)}
                       </td>
                       <td
                         className="font-mono"
                         style={{
                           color:
                             contribution > 0
-                              ? "var(--accent-green)"
+                              ? 'var(--accent-green)'
                               : contribution < 0
-                              ? "var(--accent-red)"
-                              : "var(--text-secondary)",
+                                ? 'var(--accent-red)'
+                                : 'var(--text-secondary)',
                         }}
                       >
-                        {contribution >= 0 ? "+" : ""}
-                        {(contribution * 100).toFixed(2)}%
+                        {contribution >= 0 ? '+' : ''}
+                        {formatPercent(contribution)}
                       </td>
-                      <td style={{ color: "var(--text-muted)", fontSize: "12px" }}>
+                      <td style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
                         {holding.provider}
                       </td>
                       <td>
-                        <span className={`badge ${holding.is_fallback ? "badge-amber" : "badge-green"}`}>
-                          {holding.is_fallback ? "FALLBACK" : "LIVE"}
+                        <span
+                          className={`badge ${holding.is_fallback ? 'badge-amber' : 'badge-green'}`}
+                        >
+                          {holding.is_fallback ? 'FALLBACK' : 'LIVE'}
                         </span>
                         {holding.is_fallback && holding.fallback_reason && (
                           <div
                             style={{
-                              color: "var(--text-muted)",
-                              fontSize: "10px",
-                              marginTop: "2px",
-                              maxWidth: "220px",
+                              color: 'var(--text-muted)',
+                              fontSize: '10px',
+                              marginTop: '2px',
+                              maxWidth: '220px',
                             }}
                           >
                             {holding.fallback_reason}
@@ -436,15 +446,15 @@ export default function PortfolioPage() {
           {/* Methodology disclosure */}
           <section className="card">
             <span className="card-title">Methodology and assumptions</span>
-            <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginTop: "8px" }}>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginTop: '8px' }}>
               {result.methodology}
             </p>
             <p
               style={{
-                color: "var(--text-muted)",
-                fontSize: "11px",
-                marginTop: "8px",
-                fontFamily: "var(--font-mono)",
+                color: 'var(--text-muted)',
+                fontSize: '11px',
+                marginTop: '8px',
+                fontFamily: 'var(--font-mono)',
               }}
             >
               Weighted impact = Σ(weight_i × shock_i). Shocks are user-supplied hypothetical

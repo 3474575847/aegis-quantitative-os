@@ -131,6 +131,29 @@ class TestValidation:
         with pytest.raises(ValueError, match="cannot be negative"):
             run_signal_backtest(_prices([100, 110]), _signals([1, 1]), slippage_bps=-0.1)
 
+    def test_rejects_invalid_position_configuration(self) -> None:
+        with pytest.raises(ValueError, match="Position size"):
+            run_signal_backtest(_prices([100, 110]), _signals([1, 1]), position_size=1.1)
+        with pytest.raises(ValueError, match="Holding period"):
+            run_signal_backtest(_prices([100, 110]), _signals([1, 1]), holding_period=0)
+
+
+class TestResearchConfiguration:
+    def test_position_size_and_benchmark_are_reported(self) -> None:
+        result = run_signal_backtest(
+            _prices([100, 110, 100, 110]),
+            _signals([1, 1, 0, 0]),
+            transaction_cost_bps=0,
+            position_size=0.5,
+            holding_period=2,
+            benchmark_prices=_prices([100, 105, 110, 115]),
+        )
+        assert result["position_size"] == 0.5
+        assert result["holding_period"] == 2
+        assert result["benchmark_return"] is not None
+        assert result["entries"] == 1
+        assert result["trade_count"] >= 1
+
 
 # ---------------------------------------------------------------------------
 # Sharpe

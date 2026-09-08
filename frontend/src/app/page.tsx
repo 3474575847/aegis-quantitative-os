@@ -1,7 +1,8 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import React, { useEffect, useState } from "react";
+import Link from 'next/link';
+import React, { useEffect, useState } from 'react';
+import { apiUrl, formatFigure, formatSignedFigure } from '@/lib/api';
 
 interface SystemStatus {
   status: string;
@@ -57,34 +58,35 @@ export default function CommandCenterPage() {
   const [signals, setSignals] = useState<SignalItem[]>([]);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [lastRefreshed, setLastRefreshed] = useState<string>("");
+  const [lastRefreshed, setLastRefreshed] = useState<string>('');
 
   const loadDashboardData = async () => {
     try {
-      const [statusRes, sigsRes, eventsRes, btcRes, ethRes, nvdaRes, aaplRes] = await Promise.allSettled([
-        fetch("http://localhost:8000/api/system/status").then((r) => r.json()),
-        fetch("http://localhost:8000/api/signals").then((r) => r.json()),
-        fetch("http://localhost:8000/api/events?limit=8").then((r) => r.json()),
-        fetch("http://localhost:8000/api/market/ticker/BTC").then((r) => r.json()),
-        fetch("http://localhost:8000/api/market/ticker/ETH").then((r) => r.json()),
-        fetch("http://localhost:8000/api/market/ticker/NVDA").then((r) => r.json()),
-        fetch("http://localhost:8000/api/market/ticker/AAPL").then((r) => r.json()),
-      ]);
+      const [statusRes, sigsRes, eventsRes, btcRes, ethRes, nvdaRes, aaplRes] =
+        await Promise.allSettled([
+          fetch(apiUrl('/api/system/status')).then((r) => r.json()),
+          fetch(apiUrl('/api/signals')).then((r) => r.json()),
+          fetch(apiUrl('/api/events?limit=8')).then((r) => r.json()),
+          fetch(apiUrl('/api/market/ticker/BTC')).then((r) => r.json()),
+          fetch(apiUrl('/api/market/ticker/ETH')).then((r) => r.json()),
+          fetch(apiUrl('/api/market/ticker/NVDA')).then((r) => r.json()),
+          fetch(apiUrl('/api/market/ticker/AAPL')).then((r) => r.json()),
+        ]);
 
-      if (statusRes.status === "fulfilled") setSystemStatus(statusRes.value);
-      if (sigsRes.status === "fulfilled") setSignals(sigsRes.value);
-      if (eventsRes.status === "fulfilled") setEvents(eventsRes.value);
+      if (statusRes.status === 'fulfilled') setSystemStatus(statusRes.value);
+      if (sigsRes.status === 'fulfilled') setSignals(sigsRes.value);
+      if (eventsRes.status === 'fulfilled') setEvents(eventsRes.value);
 
       const quoteMap: Record<string, TickerQuote> = {};
-      if (btcRes.status === "fulfilled") quoteMap["BTC"] = btcRes.value;
-      if (ethRes.status === "fulfilled") quoteMap["ETH"] = ethRes.value;
-      if (nvdaRes.status === "fulfilled") quoteMap["NVDA"] = nvdaRes.value;
-      if (aaplRes.status === "fulfilled") quoteMap["AAPL"] = aaplRes.value;
+      if (btcRes.status === 'fulfilled') quoteMap['BTC'] = btcRes.value;
+      if (ethRes.status === 'fulfilled') quoteMap['ETH'] = ethRes.value;
+      if (nvdaRes.status === 'fulfilled') quoteMap['NVDA'] = nvdaRes.value;
+      if (aaplRes.status === 'fulfilled') quoteMap['AAPL'] = aaplRes.value;
       setQuotes(quoteMap);
 
       setLastRefreshed(new Date().toLocaleTimeString());
     } catch (e) {
-      console.error("Failed to load command center telemetry", e);
+      console.error('Failed to load command center telemetry', e);
     } finally {
       setLoading(false);
     }
@@ -97,41 +99,41 @@ export default function CommandCenterPage() {
   }, []);
 
   const formatPrice = (val: number) => {
-    if (val >= 1000) return `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    return `$${val.toFixed(2)}`;
+    return `$${formatFigure(val)}`;
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Top Banner / System Status */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <h1 style={{ fontSize: "24px", fontWeight: "700", letterSpacing: "-0.5px" }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h1 style={{ fontSize: '24px', fontWeight: '700', letterSpacing: '-0.5px' }}>
               Aegis Command Center
             </h1>
             <span
               className={`badge ${
-                systemStatus?.status === "OPERATIONAL" ? "badge-green" : "badge-amber"
+                systemStatus?.status === 'OPERATIONAL' ? 'badge-green' : 'badge-amber'
               } font-mono`}
-              style={{ fontSize: "11px", letterSpacing: "0.5px" }}
+              style={{ fontSize: '11px', letterSpacing: '0.5px' }}
             >
-              {systemStatus?.status || "CONNECTING..."}
+              {systemStatus?.status || 'CONNECTING...'}
             </span>
           </div>
-          <p style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "4px" }}>
-            Real-time financial intelligence telemetry, deterministic factor pipelines, and live market synchronization.
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
+            Real-time financial intelligence telemetry, deterministic factor pipelines, and live
+            market synchronization.
           </p>
         </div>
 
-        <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-          <span style={{ fontSize: "11px", color: "var(--text-muted)" }} className="font-mono">
-            {lastRefreshed ? `Refreshed: ${lastRefreshed}` : "Syncing..."}
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }} className="font-mono">
+            {lastRefreshed ? `Refreshed: ${lastRefreshed}` : 'Syncing...'}
           </span>
           <button
             className="btn btn-secondary"
             onClick={loadDashboardData}
-            style={{ fontSize: "11px", padding: "4px 8px" }}
+            style={{ fontSize: '11px', padding: '4px 8px' }}
           >
             ↻ Refresh
           </button>
@@ -142,24 +144,24 @@ export default function CommandCenterPage() {
       <div className="grid-4">
         <div className="card">
           <span className="card-title">Events Logged (Timescale)</span>
-          <strong className="card-value" style={{ fontSize: "22px", color: "var(--accent-cyan)" }}>
-            {systemStatus?.counts.events_logged?.toLocaleString() || "—"}
+          <strong className="card-value" style={{ fontSize: '22px', color: 'var(--accent-cyan)' }}>
+            {systemStatus?.counts.events_logged?.toLocaleString() || '—'}
           </strong>
           <span className="card-subtitle">Hypertable audit trail</span>
         </div>
 
         <div className="card">
           <span className="card-title">Factor Observations</span>
-          <strong className="card-value" style={{ fontSize: "22px", color: "var(--accent-green)" }}>
-            {systemStatus?.counts.signal_results?.toLocaleString() || "—"}
+          <strong className="card-value" style={{ fontSize: '22px', color: 'var(--accent-green)' }}>
+            {systemStatus?.counts.signal_results?.toLocaleString() || '—'}
           </strong>
           <span className="card-subtitle">Point-in-time signal results</span>
         </div>
 
         <div className="card">
           <span className="card-title">Active Experiments</span>
-          <strong className="card-value" style={{ fontSize: "22px" }}>
-            {systemStatus?.counts.experiments || "—"}
+          <strong className="card-value" style={{ fontSize: '22px' }}>
+            {systemStatus?.counts.experiments || '—'}
           </strong>
           <span className="card-subtitle">
             {systemStatus?.counts.experiment_runs || 0} executed runs
@@ -168,7 +170,7 @@ export default function CommandCenterPage() {
 
         <div className="card">
           <span className="card-title">Engine Latency / Health</span>
-          <strong className="card-value" style={{ fontSize: "20px", color: "var(--accent-green)" }}>
+          <strong className="card-value" style={{ fontSize: '20px', color: 'var(--accent-green)' }}>
             SUB-SECOND
           </strong>
           <span className="card-subtitle">Deterministic pipeline active</span>
@@ -177,52 +179,85 @@ export default function CommandCenterPage() {
 
       {/* Section 1: Live Market Watchlist & Freshness Provenance */}
       <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-          <span style={{ fontSize: "12px", textTransform: "uppercase", color: "var(--text-muted)", fontWeight: "600" }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '8px',
+          }}
+        >
+          <span
+            style={{
+              fontSize: '12px',
+              textTransform: 'uppercase',
+              color: 'var(--text-muted)',
+              fontWeight: '600',
+            }}
+          >
             Live Market Feeds & Provenance
           </span>
-          <Link href="/signals" style={{ fontSize: "11px", color: "var(--accent-cyan)" }}>
+          <Link href="/signals" style={{ fontSize: '11px', color: 'var(--accent-cyan)' }}>
             Open Signal Explorer →
           </Link>
         </div>
 
         <div className="grid-4">
-          {["BTC", "ETH", "NVDA", "AAPL"].map((sym) => {
+          {['BTC', 'ETH', 'NVDA', 'AAPL'].map((sym) => {
             const q = quotes[sym];
             if (!q) {
               return (
                 <div className="card" key={sym}>
                   <span className="card-title">{sym}</span>
-                  <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>Fetching live feed...</span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
+                    Fetching live feed...
+                  </span>
                 </div>
               );
             }
             return (
               <div className="card" key={sym}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                >
                   <span className="card-title">{q.symbol}</span>
                   <span
-                    className={`badge ${q.is_fallback ? "badge-amber" : "badge-green"} font-mono`}
-                    style={{ fontSize: "9px" }}
+                    className={`badge ${q.is_fallback ? 'badge-amber' : 'badge-green'} font-mono`}
+                    style={{ fontSize: '9px' }}
                   >
-                    {q.is_fallback ? "FALLBACK" : "LIVE FEED"}
+                    {q.is_fallback ? 'FALLBACK' : 'LIVE FEED'}
                   </span>
                 </div>
-                <strong className="card-value" style={{ fontSize: "20px", marginTop: "4px" }}>
+                <strong className="card-value" style={{ fontSize: '20px', marginTop: '4px' }}>
                   {formatPrice(q.price)}
                 </strong>
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: "8px", fontSize: "11px" }}>
-                  <span style={{ color: "var(--text-muted)" }}>Z-Score:</span>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    marginTop: '8px',
+                    fontSize: '11px',
+                  }}
+                >
+                  <span style={{ color: 'var(--text-muted)' }}>Z-Score:</span>
                   <span
                     className="font-mono"
                     style={{
-                      color: q.z_score_signal > 0 ? "var(--accent-green)" : q.z_score_signal < 0 ? "var(--accent-red)" : "inherit",
+                      color:
+                        q.z_score_signal > 0
+                          ? 'var(--accent-green)'
+                          : q.z_score_signal < 0
+                            ? 'var(--accent-red)'
+                            : 'inherit',
                     }}
                   >
-                    {q.z_score_signal >= 0 ? `+${q.z_score_signal.toFixed(3)}` : q.z_score_signal.toFixed(3)}
+                    {formatSignedFigure(q.z_score_signal)}
                   </span>
                 </div>
-                <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: "4px" }} className="font-mono">
+                <div
+                  style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}
+                  className="font-mono"
+                >
                   {q.exchange}
                 </div>
               </div>
@@ -232,12 +267,12 @@ export default function CommandCenterPage() {
       </div>
 
       {/* Section 2: Active Factor Signals & Pipeline State */}
-      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "24px" }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px' }}>
         {/* Active Factor Models */}
         <div className="table-container">
           <div className="table-header">
-            <span style={{ fontWeight: "600", fontSize: "13px" }}>Active Factor Signals</span>
-            <Link href="/research" style={{ fontSize: "11px", color: "var(--accent-cyan)" }}>
+            <span style={{ fontWeight: '600', fontSize: '13px' }}>Active Factor Signals</span>
+            <Link href="/research" style={{ fontSize: '11px', color: 'var(--accent-cyan)' }}>
               Test in Research Lab →
             </Link>
           </div>
@@ -253,21 +288,25 @@ export default function CommandCenterPage() {
             <tbody>
               {signals.length === 0 ? (
                 <tr>
-                  <td colSpan={4} style={{ textAlign: "center", padding: "20px" }}>Loading signals...</td>
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>
+                    Loading signals...
+                  </td>
                 </tr>
               ) : (
                 signals.map((sig) => (
                   <tr key={sig.id}>
                     <td>
-                      <div style={{ fontWeight: "600", color: "var(--text-primary)" }}>{sig.name}</div>
-                      <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>
+                      <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
+                        {sig.name}
+                      </div>
+                      <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
                         {Object.entries(sig.parameters || {})
                           .map(([k, v]) => `${k}:${v}`)
-                          .join(" • ")}
+                          .join(' • ')}
                       </div>
                     </td>
                     <td>
-                      <span className="badge badge-cyan font-mono" style={{ fontSize: "10px" }}>
+                      <span className="badge badge-cyan font-mono" style={{ fontSize: '10px' }}>
                         v{sig.version}
                       </span>
                     </td>
@@ -275,22 +314,25 @@ export default function CommandCenterPage() {
                       <span
                         className="font-mono"
                         style={{
-                          fontWeight: "700",
+                          fontWeight: '700',
                           color:
                             sig.latest_value !== null && sig.latest_value > 0
-                              ? "var(--accent-green)"
+                              ? 'var(--accent-green)'
                               : sig.latest_value !== null && sig.latest_value < 0
-                              ? "var(--accent-red)"
-                              : "inherit",
+                                ? 'var(--accent-red)'
+                                : 'inherit',
                         }}
                       >
-                        {sig.latest_value !== null ? (sig.latest_value >= 0 ? `+${sig.latest_value.toFixed(4)}` : sig.latest_value.toFixed(4)) : "Pending"}
+                          {sig.latest_value !== null ? formatSignedFigure(sig.latest_value) : 'Pending'}
                       </span>
                     </td>
-                    <td style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                    <td style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                       {sig.latest_timestamp
-                        ? new Date(sig.latest_timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                        : "—"}
+                        ? new Date(sig.latest_timestamp).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : '—'}
                     </td>
                   </tr>
                 ))
@@ -300,47 +342,52 @@ export default function CommandCenterPage() {
         </div>
 
         {/* System Services & Ingestion Workers */}
-        <div className="card" style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span className="card-title">Infrastructure Status</span>
-            <Link href="/health" style={{ fontSize: "11px", color: "var(--accent-cyan)" }}>
+            <Link href="/health" style={{ fontSize: '11px', color: 'var(--accent-cyan)' }}>
               Detailed Health →
             </Link>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "4px" }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
             {systemStatus?.services.map((srv) => (
               <div
                 key={srv.name}
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "8px 12px",
-                  backgroundColor: "var(--bg-secondary)",
-                  borderRadius: "6px",
-                  fontSize: "12px",
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '8px 12px',
+                  backgroundColor: 'var(--bg-secondary)',
+                  borderRadius: '6px',
+                  fontSize: '12px',
                 }}
               >
-                <div style={{ display: "flex", flexDirection: "column" }}>
-                  <strong style={{ color: "var(--text-primary)", textTransform: "capitalize" }}>
-                    {srv.name.replace(/_/g, " ")}
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>
+                    {srv.name.replace(/_/g, ' ')}
                   </strong>
                   {srv.port && (
-                    <span className="font-mono" style={{ fontSize: "10px", color: "var(--text-muted)" }}>
-                      Port {srv.port} {srv.mode ? `• ${srv.mode}` : ""}
+                    <span
+                      className="font-mono"
+                      style={{ fontSize: '10px', color: 'var(--text-muted)' }}
+                    >
+                      Port {srv.port} {srv.mode ? `• ${srv.mode}` : ''}
                     </span>
                   )}
                 </div>
                 <span
                   className={`badge ${
-                    srv.status === "UP" || srv.status === "STREAMING" || srv.status === "DETERMINISTIC"
-                      ? "badge-green"
-                      : srv.status === "DEGRADED"
-                      ? "badge-amber"
-                      : "badge-red"
+                    srv.status === 'UP' ||
+                    srv.status === 'STREAMING' ||
+                    srv.status === 'DETERMINISTIC'
+                      ? 'badge-green'
+                      : srv.status === 'DEGRADED'
+                        ? 'badge-amber'
+                        : 'badge-red'
                   } font-mono`}
-                  style={{ fontSize: "10px" }}
+                  style={{ fontSize: '10px' }}
                 >
                   {srv.status}
                 </span>
@@ -350,16 +397,18 @@ export default function CommandCenterPage() {
 
           <div
             style={{
-              marginTop: "auto",
-              padding: "10px",
-              backgroundColor: "rgba(6, 182, 212, 0.05)",
-              border: "1px solid var(--accent-cyan)",
-              borderRadius: "6px",
-              fontSize: "11px",
-              color: "var(--text-secondary)",
+              marginTop: 'auto',
+              padding: '10px',
+              backgroundColor: 'rgba(6, 182, 212, 0.05)',
+              border: '1px solid var(--accent-cyan)',
+              borderRadius: '6px',
+              fontSize: '11px',
+              color: 'var(--text-secondary)',
             }}
           >
-            <strong>Research Protocol:</strong> Point-in-time guarantees enforce that signals computed at bar <em>t</em> execute strictly at <em>t+1</em> close without lookahead bias.
+            <strong>Research Protocol:</strong> Point-in-time guarantees enforce that signals
+            computed at bar <em>t</em> execute strictly at <em>t+1</em> close without lookahead
+            bias.
           </div>
         </div>
       </div>
@@ -367,8 +416,10 @@ export default function CommandCenterPage() {
       {/* Section 3: Live Event Log Stream */}
       <div className="table-container">
         <div className="table-header">
-          <span style={{ fontWeight: "600", fontSize: "13px" }}>Recent Event Stream (Audit Ledger)</span>
-          <Link href="/timeline" style={{ fontSize: "11px", color: "var(--accent-cyan)" }}>
+          <span style={{ fontWeight: '600', fontSize: '13px' }}>
+            Recent Event Stream (Audit Ledger)
+          </span>
+          <Link href="/timeline" style={{ fontSize: '11px', color: 'var(--accent-cyan)' }}>
             Full Event Timeline →
           </Link>
         </div>
@@ -385,7 +436,9 @@ export default function CommandCenterPage() {
           <tbody>
             {events.length === 0 ? (
               <tr>
-                <td colSpan={5} style={{ textAlign: "center", padding: "20px" }}>No events received yet.</td>
+                <td colSpan={5} style={{ textAlign: 'center', padding: '20px' }}>
+                  No events received yet.
+                </td>
               </tr>
             ) : (
               events.map((evt) => (
@@ -393,27 +446,43 @@ export default function CommandCenterPage() {
                   <td>
                     <span
                       className={`badge ${
-                        evt.event_type.includes("Completed")
-                          ? "badge-green"
-                          : evt.event_type.includes("Triggered")
-                          ? "badge-cyan"
-                          : "badge-amber"
+                        evt.event_type.includes('Completed')
+                          ? 'badge-green'
+                          : evt.event_type.includes('Triggered')
+                            ? 'badge-cyan'
+                            : 'badge-amber'
                       } font-mono`}
-                      style={{ fontSize: "10px" }}
+                      style={{ fontSize: '10px' }}
                     >
                       {evt.event_type}
                     </span>
                   </td>
-                  <td style={{ fontSize: "11px", fontWeight: "600" }}>{evt.source}</td>
+                  <td style={{ fontSize: '11px', fontWeight: '600' }}>{evt.source}</td>
                   <td>
-                    <span className="font-mono" style={{ fontSize: "10px", color: "var(--text-muted)" }}>
-                      {evt.correlation_id ? evt.correlation_id.slice(0, 8) + "..." : "—"}
+                    <span
+                      className="font-mono"
+                      style={{ fontSize: '10px', color: 'var(--text-muted)' }}
+                    >
+                      {evt.correlation_id ? evt.correlation_id.slice(0, 8) + '...' : '—'}
                     </span>
                   </td>
-                  <td style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                    {new Date(evt.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                  <td style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    {new Date(evt.timestamp).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                    })}
                   </td>
-                  <td style={{ fontSize: "11px", color: "var(--text-secondary)", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <td
+                    style={{
+                      fontSize: '11px',
+                      color: 'var(--text-secondary)',
+                      maxWidth: '300px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
                     {JSON.stringify(evt.payload)}
                   </td>
                 </tr>

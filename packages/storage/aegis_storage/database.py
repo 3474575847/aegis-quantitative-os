@@ -1,3 +1,4 @@
+import contextlib
 from collections.abc import AsyncGenerator
 
 from sqlalchemy import text
@@ -36,27 +37,24 @@ class DatabaseManager:
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
-            # Initialize TimescaleDB hypertables
-            await conn.execute(
-                text(
-                    "SELECT create_hypertable('raw_events', 'received_at', if_not_exists => TRUE);"
-                )
-            )
-            await conn.execute(
-                text(
-                    "SELECT create_hypertable('normalized_events', 'occurred_at', "
-                    "if_not_exists => TRUE);"
-                )
-            )
-            await conn.execute(
-                text("SELECT create_hypertable('event_log', 'timestamp', if_not_exists => TRUE);")
-            )
-            await conn.execute(
-                text(
-                    "SELECT create_hypertable('signal_results', 'timestamp', "
-                    "if_not_exists => TRUE);"
-                )
-            )
+            # Initialize TimescaleDB hypertables if running against PostgreSQL
+            if self.engine.dialect.name == "postgresql":
+                _ie = "if_not_exists => TRUE"
+                hypertables = [
+                    f"SELECT create_hypertable('raw_events', 'received_at', {_ie});",
+                    f"SELECT create_hypertable('normalized_events', 'occurred_at', {_ie});",
+                    f"SELECT create_hypertable('event_log', 'timestamp', {_ie});",
+                    f"SELECT create_hypertable('signal_results', 'timestamp', {_ie});",
+                    f"SELECT create_hypertable('raw_news_articles', 'published_at', {_ie});",
+                    (
+                        "SELECT create_hypertable('canonical_articles',"
+                        f" 'first_published_at', {_ie});"
+                    ),
+                    f"SELECT create_hypertable('macro_observations', 'observation_date', {_ie});",
+                ]
+                for stmt in hypertables:
+                    with contextlib.suppress(Exception):
+                        await conn.execute(text(stmt))
 
     async def close(self) -> None:
         await self.engine.dispose()

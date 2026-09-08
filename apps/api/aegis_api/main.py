@@ -1,10 +1,64 @@
 import asyncio
+import csv
+import io
 import os
 import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+import httpx
+import pandas as pd
+import uvicorn
+from aegis_experimentation.models import ExperimentDefinition
+from aegis_experimentation.registry import ExperimentRegistry
+from aegis_observability.logger import get_logger
+from aegis_sensors.entity_resolution import EntityResolver
+from aegis_signals.analytics import point_in_time_zscore
+from aegis_signals.backtest import run_signal_backtest
+from aegis_signals.news_momentum import NewsMomentumStrategy
+from aegis_signals.processors import (
+    BtcMomentumProcessor,
+    MeanReversionProcessor,
+    RedditSentimentProcessor,
+)
+from aegis_storage.database import DatabaseManager
+from aegis_storage.models.events import EventLog
+from aegis_storage.models.experimentation import (
+    ExperimentDefinitionRecord,
+    ExperimentRunRecord,
+)
+from aegis_storage.models.macro import MacroObservationRecord
+from aegis_storage.models.news import CanonicalArticleRecord
+from aegis_storage.models.signals import SignalDefinitionRecord, SignalResultRecord
+from aegis_storage.repositories.experimentation import ExperimentRepository
+from aegis_storage.repositories.macro import MacroRepository
+from aegis_storage.repositories.news import NewsRepository
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+from sqlalchemy import desc, func, select
+
+from aegis_api.schemas import (
+    CanonicalNewsArticleResponse,
+    EventLogResponse,
+    ExperimentCompareResponse,
+    ExperimentComparisonItem,
+    ExperimentCreateRequest,
+    ExperimentRunResponse,
+    ExperimentSummaryResponse,
+    MacroSeriesPoint,
+    MarketTickerResponse,
+    NewsClusterDetailResponse,
+    RawNewsArticleResponse,
+    RegimeClassification,
+    SignalDatapointResponse,
+    SignalHistoryResponse,
+    SignalItemResponse,
+    YieldCurveResponse,
+)
+
 
 # Automatically discover and load .env file from repository root
 def _load_env_file() -> None:
@@ -26,42 +80,18 @@ def _load_env_file() -> None:
             except Exception:
                 pass
 
+
 _load_env_file()
 
-import httpx
-import pandas as pd
-import uvicorn
-from aegis_experimentation.models import ExperimentDefinition
-from aegis_experimentation.registry import ExperimentRegistry
-from aegis_observability.logger import get_logger
-from aegis_signals.backtest import run_signal_backtest
-from aegis_storage.database import DatabaseManager
-from aegis_storage.models.events import EventLog
-from aegis_storage.models.experimentation import (
-    ExperimentDefinitionRecord,
-    ExperimentRunRecord,
-)
-from aegis_storage.models.signals import SignalDefinitionRecord, SignalResultRecord
-from aegis_storage.repositories.experimentation import ExperimentRepository
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-from sqlalchemy import desc, func, select
-
-from aegis_api.schemas import (
-    EventLogResponse,
-    ExperimentCompareResponse,
-    ExperimentComparisonItem,
-    ExperimentCreateRequest,
-    ExperimentRunResponse,
-    ExperimentSummaryResponse,
-    MarketTickerResponse,
-    SignalDatapointResponse,
-    SignalHistoryResponse,
-    SignalItemResponse,
-)
-
 logger = get_logger(__name__)
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "AEGIS_CORS_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000",
+    ).split(",")
+    if origin.strip()
+]
 
 
 class PortfolioScenarioRequest(BaseModel):
@@ -83,7 +113,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -159,7 +190,11 @@ async def get_system_status() -> dict[str, Any]:
     except Exception:
         redis_status = "DOWN"
 
-    overall_status = "OPERATIONAL" if database_status == "UP" and worker_status == "UP" else "DEGRADED"
+    overall_status = (
+        "OPERATIONAL"
+        if database_status == "UP" and worker_status == "UP"
+        else "DEGRADED"
+    )
     return {
         "status": overall_status,
         "uptime_seconds": round(time.monotonic() - _STARTED_AT),
@@ -255,7 +290,7 @@ async def run_backtest(
     symbol: str = Query(default="BTC"),
     transaction_cost_bps: float = Query(default=5.0, ge=0, le=500),
     slippage_bps: float = Query(default=0.0, ge=0, le=500),
-    experiment_id: uuid.UUID | None = Query(default=None),
+    experiment_id: uuid.UUID | None = Query(default=None),  # noqa: B008
 ) -> dict[str, Any]:
     """
     Run a transparent next-bar backtest over real candles and stored signals.
@@ -294,22 +329,44 @@ async def run_backtest(
         }
         for candle in candles
     ).set_index("timestamp").sort_index()
-    signal_frame = pd.DataFrame(
-        {
-            "signal": record.value,
-            "timestamp": pd.to_datetime(record.timestamp, utc=True),
-        }
-        for record in records
-    ).set_index("timestamp").sort_index()
+    sym = symbol.upper().strip()
     price_frame.index = price_frame.index.as_unit("ns")
-    signal_frame.index = signal_frame.index.as_unit("ns")
-    aligned = pd.merge_asof(
-        price_frame,
-        signal_frame,
-        left_index=True,
-        right_index=True,
-        direction="backward",
-    ).dropna()
+    signal_source = "stored point-in-time signal observations"
+    if records:
+        signal_frame = pd.DataFrame(
+            {
+                "signal": record.value,
+                "timestamp": pd.to_datetime(record.timestamp, utc=True),
+            }
+            for record in records
+        ).set_index("timestamp").sort_index()
+        signal_frame.index = signal_frame.index.as_unit("ns")
+        aligned = pd.merge_asof(
+            price_frame,
+            signal_frame,
+            left_index=True,
+            right_index=True,
+            direction="backward",
+        ).dropna()
+    else:
+        processor = {
+            "BTC_MOMENTUM_ZSCORE": BtcMomentumProcessor(),
+            "MEAN_REVERSION_PRICE": MeanReversionProcessor(),
+            "REDDIT_SENTIMENT_LEAD": RedditSentimentProcessor(),
+        }.get(signal_def.name if signal_def else "")
+        if processor is None:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"{signal_def.name if signal_def else 'This strategy'} has no "
+                    f"symbol-specific observations for {sym}"
+                ),
+            )
+        derived = processor.compute(
+            price_frame[["price"]], signal_def.parameters if signal_def else {}
+        )
+        aligned = price_frame.assign(signal=derived).dropna()
+        signal_source = "deterministic signal derived from this symbol's real candles"
     price_series = aligned["price"]
     signal_series = aligned["signal"]
     try:
@@ -322,8 +379,10 @@ async def run_backtest(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
-    sym = symbol.upper().strip()
-    methodology = "signal at t positions at t+1 close; costs deducted on position changes"
+    methodology = (
+        f"{signal_source}; signal at t positions at t+1 close; "
+        "costs deducted on position changes"
+    )
 
     # Optionally persist as an experiment run
     persisted_run_id: str | None = None
@@ -385,9 +444,8 @@ async def list_experiments() -> list[ExperimentSummaryResponse]:
             for run in sorted_runs:
                 run_result = (run.metadata_json or {}).get("result", {})
                 sharpe = run_result.get("sharpe")
-                if sharpe is not None:
-                    if best_sharpe is None or sharpe > best_sharpe:
-                        best_sharpe = sharpe
+                if sharpe is not None and (best_sharpe is None or sharpe > best_sharpe):
+                    best_sharpe = sharpe
 
             params = exp.parameters or {}
             output.append(ExperimentSummaryResponse(
@@ -437,6 +495,9 @@ async def create_experiment(request: ExperimentCreateRequest) -> ExperimentSumma
 
         if request.initial_result:
             run_id = uuid.uuid4()
+            default_methodology = (
+                "signal at t positions at t+1 close; costs deducted on position changes"
+            )
             run_record = ExperimentRunRecord(
                 run_id=run_id,
                 experiment_id=definition.experiment_id,
@@ -449,7 +510,7 @@ async def create_experiment(request: ExperimentCreateRequest) -> ExperimentSumma
                     "symbol": request.symbol.upper().strip(),
                     "transaction_cost_bps": request.transaction_cost_bps,
                     "slippage_bps": request.slippage_bps,
-                    "methodology": request.methodology or "signal at t positions at t+1 close; costs deducted on position changes",
+                    "methodology": request.methodology or default_methodology,
                     "result": request.initial_result,
                 },
             )
@@ -520,10 +581,11 @@ async def _compare_experiments_by_ids(experiment_id_strs: list[str]) -> Experime
             if sig_id_str:
                 try:
                     sig_uuid = uuid.UUID(sig_id_str)
+                    stmt = select(SignalDefinitionRecord).where(
+                        SignalDefinitionRecord.id == sig_uuid
+                    )
                     sig_record = (
-                        await session.execute(
-                            select(SignalDefinitionRecord).where(SignalDefinitionRecord.id == sig_uuid)
-                        )
+                        await session.execute(stmt)
                     ).scalars().first()
                     if sig_record:
                         sig_name = sig_record.name
@@ -638,8 +700,11 @@ async def run_experiment(experiment_id: uuid.UUID) -> ExperimentRunResponse:
     signal_id_str = str(signal_id_val)
     try:
         signal_uuid = uuid.UUID(signal_id_str)
-    except ValueError:
-        raise HTTPException(status_code=422, detail=f"Invalid signal_id in experiment: {signal_id_str}")
+    except ValueError as err:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid signal_id in experiment: {signal_id_str}",
+        ) from err
 
     symbol = str(params.get("symbol", "BTC"))
     cost_bps = float(params.get("transaction_cost_bps", 5.0))
@@ -717,9 +782,20 @@ async def clone_experiment(
 
     src_params = source.parameters or {}
     chosen_signal_id = signal_id if signal_id is not None else src_params.get("signal_id")
-    chosen_symbol = (symbol.upper().strip() if symbol else None) or str(src_params.get("symbol", "BTC"))
-    chosen_cost = transaction_cost_bps if transaction_cost_bps is not None else src_params.get("transaction_cost_bps", 5.0)
-    chosen_slip = slippage_bps if slippage_bps is not None else src_params.get("slippage_bps", 0.0)
+    chosen_symbol = (
+        (symbol.upper().strip() if symbol else None)
+        or str(src_params.get("symbol", "BTC"))
+    )
+    chosen_cost = (
+        transaction_cost_bps
+        if transaction_cost_bps is not None
+        else src_params.get("transaction_cost_bps", 5.0)
+    )
+    chosen_slip = (
+        slippage_bps
+        if slippage_bps is not None
+        else src_params.get("slippage_bps", 0.0)
+    )
 
     clone_req = ExperimentCreateRequest(
         name=name,
@@ -728,7 +804,7 @@ async def clone_experiment(
         symbol=str(chosen_symbol),
         transaction_cost_bps=float(chosen_cost),
         slippage_bps=float(chosen_slip),
-        tags=list(source.tags or []) + ["cloned"],
+        tags=[*(source.tags or []), "cloned"],
     )
     return await create_experiment(clone_req)
 
@@ -780,6 +856,83 @@ async def list_events(limit: int = Query(default=50, le=200)) -> list[EventLogRe
     return []
 
 
+_entity_resolver = EntityResolver()
+
+
+@app.get("/api/news/latest", response_model=list[CanonicalNewsArticleResponse])
+async def get_latest_news(
+    limit: int = Query(default=50, ge=1, le=200),
+    min_corroboration: float = Query(default=0.0, ge=0.0, le=1.0),
+) -> list[CanonicalNewsArticleResponse]:
+    """
+    Return the most recent canonical news articles from the database.
+
+    Articles are ordered by ``first_available_at`` DESC — the point-in-time
+    when Aegis first made the story actionable, not the publication timestamp.
+
+    ``min_corroboration`` filters to stories confirmed by multiple independent
+    publishers (0.75 = 2+ publishers, 0.95 = 3+ publishers).
+    """
+    async for session in db_manager.get_session():
+        repo = NewsRepository(session)
+        records = await repo.get_latest_canonical(
+            limit=limit, min_corroboration=min_corroboration
+        )
+        return [CanonicalNewsArticleResponse.from_record(r) for r in records]
+    return []
+
+
+@app.get("/api/news/symbol/{symbol}", response_model=list[CanonicalNewsArticleResponse])
+async def get_news_by_symbol(
+    symbol: str,
+    limit: int = Query(default=50, ge=1, le=200),
+) -> list[CanonicalNewsArticleResponse]:
+    """
+    Return canonical news articles mentioning a specific ticker or asset symbol.
+
+    The symbol is resolved via EntityResolver before filtering, so ``Apple``,
+    ``AAPL``, ``Apple Inc.`` all resolve to ``AAPL``.
+
+    Filtering uses the ``entities`` column on ``canonical_articles``, which is
+    populated at ingestion time by the EntityResolver pipeline.
+    """
+    canonical_symbol = _entity_resolver.resolve_symbol(symbol.strip())
+    if not canonical_symbol:
+        raise HTTPException(status_code=422, detail=f"Could not resolve symbol: {symbol!r}")
+
+    async for session in db_manager.get_session():
+        repo = NewsRepository(session)
+        records = await repo.get_latest_for_symbol(
+            symbol=canonical_symbol, limit=limit
+        )
+        return [CanonicalNewsArticleResponse.from_record(r) for r in records]
+    return []
+
+
+@app.get("/api/news/cluster/{cluster_id}", response_model=NewsClusterDetailResponse)
+async def get_news_cluster(cluster_id: str) -> NewsClusterDetailResponse:
+    """
+    Return full cluster detail for a single canonical article:
+    the canonical record plus all constituent raw provider observations.
+
+    This endpoint exposes the full provenance chain required by the
+    Aegis data-honesty principle — every headline is traceable to its
+    original provider ingestion record.
+    """
+    async for session in db_manager.get_session():
+        repo = NewsRepository(session)
+        canonical = await repo.get_cluster_by_id(cluster_id)
+        if canonical is None:
+            raise HTTPException(status_code=404, detail=f"Cluster not found: {cluster_id!r}")
+        raw_records = await repo.get_raw_articles_by_cluster(str(canonical.id))
+        return NewsClusterDetailResponse(
+            canonical=CanonicalNewsArticleResponse.from_record(canonical),
+            raw_articles=[RawNewsArticleResponse.from_record(r) for r in raw_records],
+            raw_article_count=len(raw_records),
+        )
+    raise HTTPException(status_code=500, detail="Database unavailable")
+
+
 @app.get("/api/market/ticker/{symbol}", response_model=MarketTickerResponse)
 async def get_market_ticker(symbol: str) -> MarketTickerResponse:
     """Fetch live market quote with 15s cache TTL and explicit fallback tracking."""
@@ -802,13 +955,18 @@ async def get_market_ticker(symbol: str) -> MarketTickerResponse:
                 if res.status_code == 200:
                     data = res.json().get("data", {})
                     price = float(data.get("amount", 0.0))
+                    z_sig = (
+                        round((price - 60000.0) / 10000.0, 4)
+                        if coin_symbol == "BTC"
+                        else 0.4215
+                    )
                     quote = MarketTickerResponse(
-                        symbol=f"{coin_symbol}/USD",
+                        symbol=sym,
                         price=price,
                         asset_class="CRYPTO",
                         exchange="Coinbase Spot (Live Feed)",
                         timestamp=datetime.now(UTC).isoformat(),
-                        z_score_signal=round((price - 60000.0) / 10000.0, 4) if coin_symbol == "BTC" else 0.4215,
+                        z_score_signal=z_sig,
                         is_fallback=False,
                         fallback_reason=None,
                     )
@@ -828,7 +986,11 @@ async def get_market_ticker(symbol: str) -> MarketTickerResponse:
                     price = float(quote_data.get("c", 0.0))
                     if price > 0:
                         previous_close = float(quote_data.get("pc", price))
-                        change_pct = ((price - previous_close) / previous_close) * 100 if previous_close else 0.0
+                        change_pct = (
+                            ((price - previous_close) / previous_close) * 100
+                            if previous_close
+                            else 0.0
+                        )
                         quote = MarketTickerResponse(
                             symbol=sym,
                             price=price,
@@ -850,7 +1012,10 @@ async def get_market_ticker(symbol: str) -> MarketTickerResponse:
             res = await client.get(
                 yurl,
                 headers={
-                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                    "User-Agent": (
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+                    )
                 },
             )
             if res.status_code == 200:
@@ -860,7 +1025,11 @@ async def get_market_ticker(symbol: str) -> MarketTickerResponse:
                     price = float(meta.get("regularMarketPrice", 0.0))
                     if price > 0:
                         prev_close = float(meta.get("chartPreviousClose", price))
-                        change_pct = ((price - prev_close) / prev_close) * 100 if prev_close else 0.0
+                        change_pct = (
+                            ((price - prev_close) / prev_close) * 100
+                            if prev_close
+                            else 0.0
+                        )
                         quote = MarketTickerResponse(
                             symbol=sym,
                             price=price,
@@ -869,7 +1038,9 @@ async def get_market_ticker(symbol: str) -> MarketTickerResponse:
                             timestamp=datetime.now(UTC).isoformat(),
                             z_score_signal=round(change_pct / 2.0, 4),
                             is_fallback=True,
-                            fallback_reason="Finnhub quote unavailable; Yahoo Finance fallback used",
+                            fallback_reason=(
+                                "Finnhub quote unavailable; Yahoo Finance fallback used"
+                            ),
                         )
                         _QUOTE_CACHE[sym] = (now_ts, quote)
                         return quote
@@ -877,9 +1048,14 @@ async def get_market_ticker(symbol: str) -> MarketTickerResponse:
             logger.warning(f"Live equity fetch failed for {sym}: {e}")
 
         # Updated realistic fallback quotes for equities & cryptos
-        fallback_price = (
-            305.59 if sym == "AAPL" else 339.30 if sym == "TSLA" else 225.01 if sym == "NVDA" else 1905.41 if sym == "ETH" else 64200.0
-        )
+        fallbacks = {
+            "AAPL": 305.59,
+            "TSLA": 339.30,
+            "NVDA": 225.01,
+            "ETH": 1905.41,
+            "BTC": 64200.0,
+        }
+        fallback_price = fallbacks.get(sym, 100.0)
         quote = MarketTickerResponse(
             symbol=sym,
             price=fallback_price,
@@ -914,7 +1090,11 @@ async def get_company_intelligence(symbol: str) -> dict[str, Any]:
         )
 
     profile = profile_response.json() if profile_response.status_code == 200 else {}
-    metrics = metrics_response.json().get("metric", {}) if metrics_response.status_code == 200 else {}
+    metrics = (
+        metrics_response.json().get("metric", {})
+        if metrics_response.status_code == 200
+        else {}
+    )
     return {
         "symbol": sym,
         "quote": quote.model_dump(),
@@ -932,13 +1112,19 @@ async def get_company_intelligence(symbol: str) -> dict[str, Any]:
 async def portfolio_scenario(request: PortfolioScenarioRequest) -> PortfolioScenarioResponse:
     """Calculate weighted scenario impact from live quote-backed holdings."""
     total_weight = sum(request.holdings.values())
-    if any(weight < 0 for weight in request.holdings.values()) or abs(total_weight - 1.0) > 0.001:
-        raise HTTPException(status_code=422, detail="Holding weights must be non-negative and sum to 1")
+    if (
+        any(weight < 0 for weight in request.holdings.values())
+        or abs(total_weight - 1.0) > 0.001
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Holding weights must be non-negative and sum to 1",
+        )
 
     quotes = await asyncio.gather(*(get_market_ticker(symbol) for symbol in request.holdings))
     holdings = []
     weighted_shock = 0.0
-    for (symbol, weight), quote in zip(request.holdings.items(), quotes):
+    for (symbol, weight), quote in zip(request.holdings.items(), quotes, strict=False):
         shock = float(request.shocks.get(symbol.upper(), 0.0))
         weighted_shock += weight * shock
         holdings.append({
@@ -955,7 +1141,10 @@ async def portfolio_scenario(request: PortfolioScenarioRequest) -> PortfolioScen
         portfolio_value=1.0,
         weighted_shock=round(weighted_shock, 6),
         holdings=holdings,
-        methodology="Unit portfolio value; scenario impact is the weighted sum of user-supplied asset shocks.",
+        methodology=(
+            "Unit portfolio value; scenario impact is the weighted "
+            "sum of user-supplied asset shocks."
+        ),
     )
 
 
@@ -996,6 +1185,8 @@ async def get_market_ticker_history(symbol: str) -> dict[str, Any]:
 
     sentiment_index = 0
     current_sentiment = 0.0
+    is_fallback_candle = False
+    candle_source = "Coinbase candles" if is_crypto else "unavailable"
 
     def sentiment_at(timestamp: int) -> float:
         nonlocal sentiment_index, current_sentiment
@@ -1012,7 +1203,9 @@ async def get_market_ticker_history(symbol: str) -> dict[str, Any]:
         if is_crypto:
             coin_symbol = sym.replace("-USD", "")
             url = f"https://api.exchange.coinbase.com/products/{coin_symbol}-USD/candles"
-            response = await client.get(url, params={"granularity": 300, "start": start, "end": now})
+            response = await client.get(
+                url, params={"granularity": 300, "start": start, "end": now}
+            )
             if response.status_code != 200:
                 raise HTTPException(status_code=502, detail="Coinbase candle feed unavailable")
             candles = sorted(response.json(), key=lambda candle: candle[0])
@@ -1028,41 +1221,573 @@ async def get_market_ticker_history(symbol: str) -> dict[str, Any]:
                     "volume": volume,
                     "sentimentZ": sentiment_at(timestamp),
                 })
+            candle_source = "Coinbase candles"
         else:
             finnhub_key = os.getenv("FINNHUB_API_KEY")
-            if not finnhub_key:
-                raise HTTPException(status_code=503, detail="FINNHUB_API_KEY is not configured")
-            response = await client.get(
-                "https://finnhub.io/api/v1/stock/candle",
-                params={"symbol": sym, "resolution": 5, "from": start, "to": now, "token": finnhub_key},
-            )
-            if response.status_code != 200:
-                raise HTTPException(status_code=502, detail="Finnhub candle feed unavailable for this API plan")
-            payload = response.json()
-            if payload.get("s") != "ok":
-                raise HTTPException(status_code=502, detail=f"Finnhub candle feed returned {payload.get('s')}")
-            for timestamp, open_price, high, low, close, volume in zip(
-                payload["t"], payload["o"], payload["h"], payload["l"], payload["c"], payload["v"]
-            ):
-                datapoints.append({
-                    "timestamp": datetime.fromtimestamp(timestamp, tz=UTC).strftime("%H:%M"),
-                    "time": timestamp,
-                    "open": open_price,
-                    "high": high,
-                    "low": low,
-                    "close": close,
-                    "price": close,
-                    "volume": volume,
-                    "sentimentZ": sentiment_at(timestamp),
-                })
+            candle_source = "unavailable"
+            finnhub_ok = False
+
+            # --- Primary: Finnhub 5-min candles (works on paid plans) ---
+            if finnhub_key:
+                try:
+                    response = await client.get(
+                        "https://finnhub.io/api/v1/stock/candle",
+                        params={
+                            "symbol": sym,
+                            "resolution": 5,
+                            "from": start,
+                            "to": now,
+                            "token": finnhub_key,
+                        },
+                    )
+                    if response.status_code == 200:
+                        payload = response.json()
+                        if payload.get("s") == "ok" and payload.get("t"):
+                            for ts, op, hi, lo, cl, vo in zip(
+                                payload["t"], payload["o"], payload["h"],
+                                payload["l"], payload["c"], payload["v"],
+                                strict=False,
+                            ):
+                                datapoints.append({
+                                    "timestamp": datetime.fromtimestamp(
+                                        ts, tz=UTC,
+                                    ).strftime("%H:%M"),
+                                    "time": ts,
+                                    "open": op,
+                                    "high": hi,
+                                    "low": lo,
+                                    "close": cl,
+                                    "price": cl,
+                                    "volume": vo,
+                                    "sentimentZ": sentiment_at(ts),
+                                })
+                            candle_source = "Finnhub candles"
+                            finnhub_ok = True
+                        else:
+                            logger.info(
+                                "Finnhub candle returned s=%r for %s — trying Yahoo fallback",
+                                payload.get("s"),
+                                sym,
+                            )
+                    else:
+                        logger.info(
+                            "Finnhub candle HTTP %d for %s — trying Yahoo fallback",
+                            response.status_code,
+                            sym,
+                        )
+                except Exception as exc:
+                    logger.warning("Finnhub candle fetch exception for %s: %s", sym, exc)
+
+            # --- Fallback: Yahoo Finance v8 chart API (no key) ---
+            if not finnhub_ok:
+                try:
+                    yurl = (
+                        f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}"
+                        f"?interval=1d&range=1mo"
+                    )
+                    yresp = await client.get(
+                        yurl,
+                        headers={
+                            "User-Agent": (
+                                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                                "Chrome/122.0.0.0 Safari/537.36"
+                            )
+                        },
+                        timeout=10.0,
+                    )
+                    if yresp.status_code == 200:
+                        chart = yresp.json().get("chart", {})
+                        results = chart.get("result") or []
+                        if results:
+                            r = results[0]
+                            timestamps: list[int] = r.get("timestamp") or []
+                            quotes_block: dict[str, Any] = (
+                                r.get("indicators", {}).get("quote", [{}])[0]
+                            )
+                            opens  = quotes_block.get("open")  or []
+                            highs  = quotes_block.get("high")  or []
+                            lows   = quotes_block.get("low")   or []
+                            closes = quotes_block.get("close") or []
+                            volumes = quotes_block.get("volume") or []
+                            for ts, op, hi, lo, cl, vo in zip(
+                                timestamps, opens, highs, lows, closes, volumes,
+                                strict=False,
+                            ):
+                                # Yahoo returns None for extended-hours gaps — skip them
+                                if None in (op, hi, lo, cl):
+                                    continue
+                                datapoints.append({
+                                    "timestamp": datetime.fromtimestamp(
+                                        ts, tz=UTC,
+                                    ).strftime("%H:%M"),
+                                    "time": ts,
+                                    "open": round(float(op), 4),
+                                    "high": round(float(hi), 4),
+                                    "low":  round(float(lo), 4),
+                                    "close": round(float(cl), 4),
+                                    "price": round(float(cl), 4),
+                                    "volume": int(vo) if vo is not None else 0,
+                                    "sentimentZ": sentiment_at(ts),
+                                })
+                            candle_source = "Yahoo Finance candles (fallback)"
+                        else:
+                            logger.warning("Yahoo Finance returned no chart result for %s", sym)
+                    else:
+                        logger.warning(
+                            "Yahoo Finance candle HTTP %d for %s", yresp.status_code, sym
+                        )
+                except Exception as exc:
+                    logger.warning("Yahoo Finance candle fetch exception for %s: %s", sym, exc)
+
+            # --- Last fallback: Stooq daily CSV (real OHLCV, no API key) ---
+            if not finnhub_ok and not datapoints:
+                try:
+                    stooq_url = f"https://stooq.com/q/d/l/?s={sym.lower()}.us&i=d"
+                    stooq_response = await client.get(
+                        stooq_url,
+                        headers={"User-Agent": "Aegis-Alpha/0.1"},
+                        timeout=10.0,
+                    )
+                    if stooq_response.status_code == 200:
+                        for row in csv.DictReader(io.StringIO(stooq_response.text)):
+                            if not row.get("Date") or row.get("Close") in {None, "N/D"}:
+                                continue
+                            candle_time = datetime.strptime(
+                                row["Date"], "%Y-%m-%d"
+                            ).replace(tzinfo=UTC)
+                            timestamp = int(candle_time.timestamp())
+                            close = float(row["Close"])
+                            datapoints.append({
+                                "timestamp": row["Date"],
+                                "time": timestamp,
+                                "open": float(row.get("Open") or close),
+                                "high": float(row.get("High") or close),
+                                "low": float(row.get("Low") or close),
+                                "close": close,
+                                "price": close,
+                                "volume": int(float(row.get("Volume") or 0)),
+                                "sentimentZ": sentiment_at(timestamp),
+                            })
+                        if datapoints:
+                            candle_source = "Stooq daily candles (fallback)"
+                    else:
+                        logger.warning(
+                            "Stooq candle HTTP %d for %s",
+                            stooq_response.status_code,
+                            sym,
+                        )
+                except Exception as exc:
+                    logger.warning("Stooq candle fetch exception for %s: %s", sym, exc)
+
+            is_fallback_candle = not finnhub_ok
 
     return {
         "symbol": sym,
         "asset_name": f"{sym}/USD" if is_crypto else sym,
         "current_price": datapoints[-1]["close"] if datapoints else None,
         "datapoints": datapoints,
-        "source": "Coinbase candles" if is_crypto else "Finnhub candles",
-        "is_fallback": False,
+        "source": candle_source,
+        "is_fallback": is_fallback_candle,
+        "fallback_reason": (
+            None if not is_fallback_candle
+            else (
+                f"Finnhub candles unavailable; {candle_source} used as fallback"
+                if datapoints
+                else "Finnhub and Yahoo Finance candle feeds both unavailable"
+            )
+        ),
+    }
+
+
+
+
+# ---------------------------------------------------------------------------
+# Macro / Regime helpers
+# ---------------------------------------------------------------------------
+
+def _record_to_series_point(rec: MacroObservationRecord) -> MacroSeriesPoint:
+    return MacroSeriesPoint(
+        series_id=rec.series_id,
+        series_name=rec.series_name,
+        unit=rec.unit,
+        category=rec.category,
+        observation_date=rec.observation_date.isoformat(),
+        value=rec.value,
+        available_at=rec.available_at.isoformat(),
+        provider=rec.provider,
+    )
+
+
+def _classify_regime(
+    unrate_rows: list[MacroObservationRecord],
+    cpi_rows: list[MacroObservationRecord],
+) -> RegimeClassification:
+    """
+    4-quadrant regime classification per Blueprint §15.2.
+
+    Uses 3-month absolute change in UNRATE (inverse growth proxy) and CPIAUCSL
+    (inflation proxy). UNRATE rising → growth deteriorating (DOWN); falling → UP.
+    """
+    now_iso = datetime.now(UTC).isoformat()
+    methodology = (
+        "4-quadrant regime: 3-month change in UNRATE (growth) and CPIAUCSL (inflation). "
+        "UNRATE ↑ = Growth DOWN; UNRATE ↓ = Growth UP."
+    )
+
+    latest_unrate = unrate_rows[-1] if unrate_rows else None
+    latest_cpi = cpi_rows[-1] if cpi_rows else None
+
+    def _direction(
+        rows: list[MacroObservationRecord], invert: bool = False
+    ) -> tuple[str, float | None]:
+        """Return (direction, 3m_change). Needs >=4 data points for a reliable 3-month signal."""
+        values = [r.value for r in rows if r.value is not None]
+        if len(values) < 4:
+            return "UNKNOWN", None
+        change = values[-1] - values[-4]   # approx 3-month change
+        threshold = 0.05                   # ignore sub-5bp noise
+        if abs(change) < threshold:
+            direction = "FLAT"
+        elif change > 0:
+            direction = "DOWN" if invert else "UP"
+        else:
+            direction = "UP" if invert else "DOWN"
+        return direction, round(change, 4)
+
+    growth_dir, growth_change = _direction(unrate_rows, invert=True)  # UNRATE rising = growth DOWN
+    inflation_dir, inflation_change = _direction(cpi_rows, invert=False)
+
+    if growth_dir == "UNKNOWN" or inflation_dir == "UNKNOWN":
+        regime = "UNKNOWN"
+        confidence = "LOW"
+    elif growth_dir in ("UP", "FLAT") and inflation_dir in ("UP", "FLAT"):
+        regime = "REFLATION"
+        confidence = "HIGH" if growth_dir == "UP" and inflation_dir == "UP" else "MEDIUM"
+    elif growth_dir in ("UP", "FLAT") and inflation_dir == "DOWN":
+        regime = "GOLDILOCKS"
+        confidence = "HIGH" if growth_dir == "UP" else "MEDIUM"
+    elif growth_dir == "DOWN" and inflation_dir in ("UP", "FLAT"):
+        regime = "STAGFLATION"
+        confidence = "HIGH" if inflation_dir == "UP" else "MEDIUM"
+    else:
+        regime = "DEFLATION"
+        confidence = "HIGH" if growth_dir == "DOWN" and inflation_dir == "DOWN" else "MEDIUM"
+
+    return RegimeClassification(
+        regime=regime,
+        growth_direction=growth_dir,
+        inflation_direction=inflation_dir,
+        growth_indicator=_record_to_series_point(latest_unrate) if latest_unrate else None,
+        inflation_indicator=_record_to_series_point(latest_cpi) if latest_cpi else None,
+        growth_change_3m=growth_change,
+        inflation_change_3m=inflation_change,
+        confidence=confidence,
+        methodology=methodology,
+        classified_at=now_iso,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Macro endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/api/macro/yields", response_model=YieldCurveResponse)
+async def get_yield_curve() -> YieldCurveResponse:
+    """
+    Current yield curve snapshot from stored FRED observations.
+
+    Returns the latest available DGS10, DGS2, FEDFUNDS, and BAMLH0A0HYM2
+    values and computes the 10Y-2Y spread (slope).
+
+    Data provenance: all values sourced from FRED via Aegis macro ingestion
+    pipeline. ``available_at`` reflects when Aegis first retrieved each value.
+    Returns null fields (not 502) when data has not yet been ingested.
+    """
+    now_iso = datetime.now(UTC).isoformat()
+    async for session in db_manager.get_session():
+        repo = MacroRepository(session)
+        latest = await repo.get_latest_per_series(
+            series_ids=["DGS10", "DGS2", "FEDFUNDS", "BAMLH0A0HYM2"]
+        )
+        by_id = {r.series_id: r for r in latest}
+
+        dgs10_rec = by_id.get("DGS10")
+        dgs2_rec = by_id.get("DGS2")
+        fedfunds_rec = by_id.get("FEDFUNDS")
+        credit_rec = by_id.get("BAMLH0A0HYM2")
+
+        slope_bps: float | None = None
+        is_inverted = False
+        if dgs10_rec and dgs2_rec and dgs10_rec.value is not None and dgs2_rec.value is not None:
+            slope_bps = round((dgs10_rec.value - dgs2_rec.value) * 100, 1)
+            is_inverted = slope_bps < 0
+
+        return YieldCurveResponse(
+            dgs10=_record_to_series_point(dgs10_rec) if dgs10_rec else None,
+            dgs2=_record_to_series_point(dgs2_rec) if dgs2_rec else None,
+            fedfunds=_record_to_series_point(fedfunds_rec) if fedfunds_rec else None,
+            slope_bps=slope_bps,
+            is_inverted=is_inverted,
+            credit_spread=_record_to_series_point(credit_rec) if credit_rec else None,
+            retrieved_at=now_iso,
+        )
+    # Fallback: DB unavailable
+    return YieldCurveResponse(
+        dgs10=None, dgs2=None, fedfunds=None,
+        slope_bps=None, is_inverted=False, credit_spread=None,
+        retrieved_at=now_iso,
+    )
+
+
+@app.get("/api/macro/regime", response_model=RegimeClassification)
+async def get_macro_regime() -> RegimeClassification:
+    """
+    Current 4-quadrant macroeconomic regime classification.
+
+    Uses the 12 most recent monthly UNRATE and CPIAUCSL observations from
+    stored FRED data to compute the 3-month growth and inflation direction.
+
+    Regime labels: REFLATION / GOLDILOCKS / STAGFLATION / DEFLATION / UNKNOWN.
+    UNKNOWN is returned when fewer than 4 months of data have been ingested.
+
+    This endpoint is fully deterministic — given the same stored observations
+    it always returns the same regime. It does NOT make live FRED API calls.
+    """
+    async for session in db_manager.get_session():
+        repo = MacroRepository(session)
+        unrate_rows = list(await repo.get_series_history("UNRATE", limit=12))
+        cpi_rows = list(await repo.get_series_history("CPIAUCSL", limit=12))
+        return _classify_regime(unrate_rows, cpi_rows)
+    return _classify_regime([], [])
+
+
+@app.get("/api/macro/series/{series_id}")
+async def get_macro_series(
+    series_id: str, limit: int = Query(default=60, ge=1, le=240)
+) -> dict[str, Any]:
+    """
+    Historical observations for a single FRED series (most recent ``limit`` points).
+
+    Supported series: DGS10, DGS2, FEDFUNDS, CPIAUCSL, UNRATE, BAMLH0A0HYM2.
+    Returns an empty ``datapoints`` list when the series has not yet been ingested.
+    """
+    sid = series_id.upper()
+    async for session in db_manager.get_session():
+        repo = MacroRepository(session)
+        rows = list(await repo.get_series_history(sid, limit=limit))
+        return {
+            "series_id": sid,
+            "count": len(rows),
+            "source": "FRED via Aegis macro pipeline",
+            "datapoints": [
+                {
+                    "observation_date": r.observation_date.isoformat(),
+                    "value": r.value,
+                    "available_at": r.available_at.isoformat(),
+                }
+                for r in rows
+            ],
+        }
+    return {"series_id": sid, "count": 0, "source": "FRED", "datapoints": []}
+
+
+async def _build_news_momentum(symbol: str) -> dict[str, Any]:
+    """Build the live/chart News Momentum slice from persisted PIT data."""
+    sym = _entity_resolver.resolve_symbol(symbol.strip())
+    history = await get_market_ticker_history(sym)
+    candles = history.get("datapoints", [])
+    if len(candles) < 2 and sym not in {"BTC", "ETH", "SOL", "DOGE"}:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            for host in ("query1.finance.yahoo.com", "query2.finance.yahoo.com"):
+                try:
+                    response = await client.get(
+                        f"https://{host}/v8/finance/chart/{sym}",
+                        params={"interval": "5m", "range": "1d"},
+                        headers={"User-Agent": "Aegis-Alpha/0.1"},
+                    )
+                    if response.status_code != 200:
+                        continue
+                    result = (response.json().get("chart", {}).get("result") or [None])[0]
+                    if not result:
+                        continue
+                    timestamps = result.get("timestamp") or []
+                    quote = (result.get("indicators", {}).get("quote") or [{}])[0]
+                    rebuilt: list[dict[str, Any]] = []
+                    for index, timestamp in enumerate(timestamps):
+                        values = [
+                            (quote.get(field) or [None])[index]
+                            for field in ("open", "high", "low", "close")
+                        ]
+                        if any(value is None for value in values):
+                            continue
+                        open_price, high, low, close = (float(value) for value in values)
+                        rebuilt.append(
+                            {
+                                "timestamp": datetime.fromtimestamp(
+                                    timestamp, tz=UTC
+                                ).strftime("%H:%M"),
+                                "time": timestamp,
+                                "open": open_price,
+                                "high": high,
+                                "low": low,
+                                "close": close,
+                                "price": close,
+                                "volume": int((quote.get("volume") or [0])[index] or 0),
+                                "sentimentZ": 0.0,
+                            }
+                        )
+                    if len(rebuilt) >= 2:
+                        candles = rebuilt
+                        history["source"] = f"Yahoo Finance {host} strategy fallback"
+                        break
+                except (httpx.HTTPError, ValueError, IndexError, TypeError):
+                    continue
+    if len(candles) < 2:
+        raise HTTPException(status_code=422, detail="Insufficient real market history")
+
+    price_frame = pd.DataFrame(
+        {
+            "price": candle["close"],
+            "timestamp": pd.to_datetime(candle["time"], unit="s", utc=True),
+        }
+        for candle in candles
+    ).set_index("timestamp").sort_index()
+    price_frame.index = price_frame.index.as_unit("ns")
+    price_frame["momentum"] = price_frame["price"].pct_change()
+
+    async for session in db_manager.get_session():
+        records = list(await NewsRepository(session).get_latest_for_symbol(sym, limit=500))
+        baseline_records = list(
+            (
+                await session.execute(
+                    select(CanonicalArticleRecord)
+                    .order_by(CanonicalArticleRecord.first_available_at.asc())
+                    .limit(1000)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    if not records:
+        return {
+            "symbol": sym,
+            "signals": [],
+            "datapoints": candles,
+            "source": history.get("source"),
+        }
+
+    records = sorted(records, key=lambda record: record.first_available_at)
+    baseline_records = sorted(baseline_records, key=lambda record: record.first_available_at)
+    if len(records) >= 5:
+        baseline_records = records
+    baseline_index = {record.cluster_id: index for index, record in enumerate(baseline_records)}
+    sentiment_values = pd.Series(
+        [float(record.sentiment_polarity) for record in baseline_records], dtype="float64"
+    )
+    sentiment_z = point_in_time_zscore(sentiment_values, window=20, min_history=5, ddof=0)
+    strategy = NewsMomentumStrategy()
+    baseline_scope = "same-symbol" if len(records) >= 5 else "global-canonical-news-fallback"
+    signals: list[dict[str, Any]] = []
+
+    for record in records:
+        available_at = pd.Timestamp(record.first_available_at)
+        candle_position = int(price_frame.index.searchsorted(available_at, side="right") - 1)
+        baseline_position = baseline_index.get(record.cluster_id, -1)
+        if (
+            candle_position < 1
+            or baseline_position < 0
+            or pd.isna(sentiment_z.iloc[baseline_position])
+        ):
+            continue
+        momentum = float(price_frame.iloc[candle_position].momentum)
+        evaluation = strategy.evaluate(
+            float(sentiment_z.iloc[baseline_position]),
+            momentum,
+            [record.cluster_id],
+            f"{baseline_scope} baseline; {record.primary_headline}",
+            factor_values={
+                "sentiment_z": float(sentiment_z.iloc[baseline_position]),
+                "momentum": momentum,
+            },
+        )
+        signals.append(
+            {
+                "timestamp": available_at.isoformat(),
+                "market_timestamp": price_frame.index[candle_position].isoformat(),
+                "symbol": sym,
+                "sentiment_z": float(sentiment_z.iloc[baseline_position]),
+                "momentum": momentum,
+                "headline": record.primary_headline,
+                "article_id": record.cluster_id,
+                **evaluation,
+            }
+        )
+
+    return {
+        "symbol": sym,
+        "source": history.get("source"),
+        "signals": signals,
+        "datapoints": candles,
+        "methodology": (
+            f"News Momentum: PIT article polarity rolling z-score using {baseline_scope} "
+            "prior observations plus prior completed-bar price momentum; no look-ahead."
+        ),
+    }
+
+
+@app.get("/api/news-momentum/{symbol}")
+async def get_news_momentum(symbol: str) -> dict[str, Any]:
+    return await _build_news_momentum(symbol)
+
+
+@app.post("/api/news-momentum/{symbol}/backtest")
+async def backtest_news_momentum(
+    symbol: str,
+    transaction_cost_bps: float = Query(default=5.0, ge=0, le=500),
+    slippage_bps: float = Query(default=0.0, ge=0, le=500),
+    position_size: float = Query(default=1.0, ge=0, le=1),
+    holding_period: int = Query(default=1, ge=1, le=100),
+) -> dict[str, Any]:
+    payload = await _build_news_momentum(symbol)
+    candles = payload["datapoints"]
+    signals = payload["signals"]
+    if not signals:
+        raise HTTPException(status_code=422, detail="No PIT-qualified news signals available")
+
+    prices = pd.Series(
+        [candle["close"] for candle in candles],
+        index=pd.to_datetime([candle["time"] for candle in candles], unit="s", utc=True),
+        name="price",
+    ).sort_index()
+    prices.index = prices.index.as_unit("ns")
+    signal_frame = pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime([item["market_timestamp"] for item in signals], utc=True),
+            "signal": [
+                1.0 if item["action"] == "BUY" else -1.0 if item["action"] == "SELL" else 0.0
+                for item in signals
+            ],
+        }
+    ).set_index("timestamp").sort_index()
+    signal_frame.index = signal_frame.index.as_unit("ns")
+    aligned = pd.merge_asof(
+        prices.to_frame(), signal_frame, left_index=True, right_index=True, direction="backward"
+    ).dropna()
+    result = run_signal_backtest(
+        aligned["price"],
+        aligned["signal"],
+        transaction_cost_bps=transaction_cost_bps,
+        slippage_bps=slippage_bps,
+        position_size=position_size,
+        holding_period=holding_period,
+    )
+    return {
+        "symbol": payload["symbol"],
+        "signals": signals,
+        "result": result,
+        "methodology": payload["methodology"],
     }
 
 

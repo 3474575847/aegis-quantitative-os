@@ -3,6 +3,10 @@ import os
 import random
 import uuid
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+from alembic import command
+from alembic.config import Config
 
 from aegis_storage.database import DatabaseManager
 from aegis_storage.models.events import EventLog
@@ -16,11 +20,15 @@ async def main() -> None:
     db_manager = DatabaseManager(db_url)
     
     try:
-        # Initialize database tables and hypertables
-        await db_manager.create_all()
-        print("Database schema and hypertables initialized.")
+        alembic_config = Config(
+            str(Path(__file__).resolve().parent / "packages/storage/alembic.ini")
+        )
+        alembic_config.set_main_option("sqlalchemy.url", db_url)
+        command.upgrade(alembic_config, "head")
+        print("Database schema and hypertables migrated.")
     except Exception as e:
-        print(f"Error during create_all: {e}")
+        print(f"Error during database migration: {e}")
+        raise
         
     async for session in db_manager.get_session():
         # Let's verify if data already exists to avoid duplicate seed

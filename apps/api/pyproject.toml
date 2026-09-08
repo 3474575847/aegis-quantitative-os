@@ -7,6 +7,7 @@ dependencies = [
     "aegis-core",
     "aegis-events",
     "aegis-observability",
+    "aegis-sensors",
     "aegis-storage",
     "aegis-signals",
     "aegis-experimentation",
@@ -23,6 +24,7 @@ build-backend = "hatchling.build"
 aegis-core = { workspace = true }
 aegis-events = { workspace = true }
 aegis-observability = { workspace = true }
+aegis-sensors = { workspace = true }
 aegis-storage = { workspace = true }
 aegis-signals = { workspace = true }
 aegis-experimentation = { workspace = true }
