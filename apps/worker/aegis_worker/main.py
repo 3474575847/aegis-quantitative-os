@@ -126,7 +126,7 @@ class FactorExecutionHandler:
                         ),
                     )
                 )
-            observations = historical_scores + [(event.timestamp, current_score)]
+            observations = [*historical_scores, (event.timestamp, current_score)]
             frame = pd.DataFrame(
                 {"score": [score for _, score in observations]},
                 index=[timestamp for timestamp, _ in observations],

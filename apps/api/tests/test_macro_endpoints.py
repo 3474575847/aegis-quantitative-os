@@ -15,7 +15,6 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 import pytest
-
 from aegis_storage.models.macro import MacroObservationRecord
 
 # ---------------------------------------------------------------------------

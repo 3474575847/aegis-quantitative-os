@@ -14,13 +14,19 @@ async def test_audit_objectives() -> None:
         resp = await client.get("/api/market/ticker/BTC")
         assert resp.status_code == 200, f"BTC ticker failed: {resp.status_code}"
         btc_quote = resp.json()
-        print(f"    ✓ BTC Spot Quote: ${btc_quote['price']:,.2f} | Exchange: {btc_quote['exchange']} | Fallback: {btc_quote['is_fallback']}")
+        print(
+            f"    ✓ BTC Spot Quote: ${btc_quote['price']:,.2f} | "
+            f"Exchange: {btc_quote['exchange']} | Fallback: {btc_quote['is_fallback']}"
+        )
         assert isinstance(btc_quote["is_fallback"], bool), "is_fallback field missing"
 
         resp_nvda = await client.get("/api/market/ticker/NVDA")
         assert resp_nvda.status_code == 200, f"NVDA ticker failed: {resp_nvda.status_code}"
         nvda_quote = resp_nvda.json()
-        print(f"    ✓ NVDA Quote: ${nvda_quote['price']:,.2f} | Exchange: {nvda_quote['exchange']} | Fallback: {nvda_quote['is_fallback']}")
+        print(
+            f"    ✓ NVDA Quote: ${nvda_quote['price']:,.2f} | "
+            f"Exchange: {nvda_quote['exchange']} | Fallback: {nvda_quote['is_fallback']}"
+        )
 
         # Test Objective 3: Source Mapping & Event Logging Alignment
         print("\n[2] Auditing Source Mapping & Event Logging Alignment...")
@@ -29,14 +35,21 @@ async def test_audit_objectives() -> None:
         events = resp_events.json()
         sources = {e["source"] for e in events}
         print(f"    ✓ Distinct Event Log Sources: {sources}")
-        
+
         # Verify no empty payload events pollute the ledger
         empty_completed_events = [
-            e for e in events 
-            if e["event_type"] == "SensorRunCompleted" and e.get("payload", {}).get("events_count") == 0
+            e
+            for e in events
+            if e["event_type"] == "SensorRunCompleted"
+            and e.get("payload", {}).get("events_count") == 0
         ]
-        print(f"    ✓ Empty SensorRunCompleted events in log: {len(empty_completed_events)} (Expected: 0)")
-        assert len(empty_completed_events) == 0, "Found empty payload SensorRunCompleted events in log!"
+        print(
+            f"    ✓ Empty SensorRunCompleted events in log: "
+            f"{len(empty_completed_events)} (Expected: 0)"
+        )
+        assert len(empty_completed_events) == 0, (
+            "Found empty payload SensorRunCompleted events in log!"
+        )
 
         # Test Objective 4: Floating-Point Precision & Rounding Contract
         print("\n[3] Auditing Floating-Point Precision & Rounding Contract...")
