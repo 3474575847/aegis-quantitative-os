@@ -101,6 +101,7 @@ export default function AegisChart({
 
   const [hoverCandle, setHoverCandle] = React.useState<Candle | null>(null);
   const [dimensions, setDimensions] = React.useState({ width: 800, height: 480 });
+  const [, setRedrawNonce] = React.useState(0);
 
   // Convert raw API data into clean Candles
   const candles = React.useMemo<Candle[]>(() => {
@@ -282,6 +283,13 @@ export default function AegisChart({
       if (match) setHoverCandle(match);
     });
 
+    // Subscribe to chart zoom & pan events to force overlay canvas redraw
+    const handleViewportChange = () => {
+      setRedrawNonce((n) => n + 1);
+    };
+    chart.timeScale().subscribeVisibleTimeRangeChange(handleViewportChange);
+    chart.timeScale().subscribeVisibleLogicalRangeChange(handleViewportChange);
+
     // Resize observer
     const handleResize = () => {
       if (containerRef.current) {
@@ -407,6 +415,7 @@ export default function AegisChart({
           activeDrawingTool={chartState.activeDrawingTool}
           drawings={chartState.drawings}
           measurements={chartState.measurements}
+          selectedDrawingId={chartState.selectedDrawingId}
           signals={signals}
           events={events}
           backtests={backtests}
@@ -418,16 +427,34 @@ export default function AegisChart({
           xToTime={xToTime}
           yToPrice={yToPrice}
           onAddDrawing={(drawing: Drawing) =>
-            setChartState((s) => ({ ...s, drawings: [...s.drawings, drawing] }))
+            setChartState((s) => ({ ...s, drawings: [...s.drawings, drawing], selectedDrawingId: drawing.id }))
+          }
+          onUpdateDrawing={(drawing: Drawing) =>
+            setChartState((s) => ({
+              ...s,
+              drawings: s.drawings.map((d) => (d.id === drawing.id ? drawing : d)),
+            }))
           }
           onAddMeasurement={(m: MeasurementResult) =>
-            setChartState((s) => ({ ...s, measurements: [...s.measurements, m] }))
+            setChartState((s) => ({ ...s, measurements: [...s.measurements, m], selectedDrawingId: m.id }))
+          }
+          onUpdateMeasurement={(m: MeasurementResult) =>
+            setChartState((s) => ({
+              ...s,
+              measurements: s.measurements.map((item) => (item.id === m.id ? m : item)),
+            }))
           }
           onRemoveDrawing={(id: string) =>
             setChartState((s) => ({ ...s, drawings: s.drawings.filter((d) => d.id !== id) }))
           }
           onRemoveMeasurement={(id: string) =>
             setChartState((s) => ({ ...s, measurements: s.measurements.filter((m) => m.id !== id) }))
+          }
+          onSelectDrawing={(id: string | null) =>
+            setChartState((s) => ({ ...s, selectedDrawingId: id }))
+          }
+          onReturnToCursor={() =>
+            setChartState((s) => ({ ...s, activeDrawingTool: 'cursor' }))
           }
         />
       </div>

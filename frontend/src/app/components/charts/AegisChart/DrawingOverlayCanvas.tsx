@@ -19,6 +19,7 @@ interface Props {
   activeDrawingTool: DrawingType;
   drawings: Drawing[];
   measurements: MeasurementResult[];
+  selectedDrawingId: string | null;
   signals: AegisSignalOverlay[];
   events: AegisEventOverlay[];
   backtests: BacktestTradeOverlay[];
@@ -30,9 +31,13 @@ interface Props {
   xToTime: (x: number) => number | null;
   yToPrice: (y: number) => number | null;
   onAddDrawing: (drawing: Drawing) => void;
+  onUpdateDrawing: (drawing: Drawing) => void;
   onAddMeasurement: (measurement: MeasurementResult) => void;
+  onUpdateMeasurement: (measurement: MeasurementResult) => void;
   onRemoveDrawing: (id: string) => void;
   onRemoveMeasurement: (id: string) => void;
+  onSelectDrawing: (id: string | null) => void;
+  onReturnToCursor: () => void;
 }
 
 export default function DrawingOverlayCanvas({
@@ -41,6 +46,7 @@ export default function DrawingOverlayCanvas({
   activeDrawingTool,
   drawings,
   measurements,
+  selectedDrawingId,
   signals,
   events,
   backtests,
@@ -52,18 +58,23 @@ export default function DrawingOverlayCanvas({
   xToTime,
   yToPrice,
   onAddDrawing,
+  onUpdateDrawing,
   onAddMeasurement,
+  onUpdateMeasurement,
   onRemoveDrawing,
   onRemoveMeasurement,
+  onSelectDrawing,
+  onReturnToCursor,
 }: Props) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
 
-  // In-progress drawing state
+  // In-progress drag-to-create state
+  const [isMouseCreating, setIsMouseCreating] = React.useState(false);
   const [startPoint, setStartPoint] = React.useState<ChartPoint | null>(null);
   const [currentMousePoint, setCurrentMousePoint] = React.useState<ChartPoint | null>(null);
 
-  // Dragging existing drawing/measurement endpoint
-  const [dragTarget, setDragTarget] = React.useState<{
+  // Dragging existing handle endpoint
+  const [activeHandle, setActiveHandle] = React.useState<{
     type: 'drawing' | 'measurement';
     id: string;
     pointIndex: number;
@@ -77,18 +88,27 @@ export default function DrawingOverlayCanvas({
     items: Array<{ label: string; value: string }>;
   } | null>(null);
 
-  // Keyboard shortcut listener (Escape to cancel tool, Delete to clear selected)
+  // Keyboard shortcut listener (Escape to return to cursor mode, Delete/Backspace to delete selected)
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        setIsMouseCreating(false);
         setStartPoint(null);
         setCurrentMousePoint(null);
-        setDragTarget(null);
+        setActiveHandle(null);
+        onSelectDrawing(null);
+        onReturnToCursor();
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedDrawingId) {
+          onRemoveDrawing(selectedDrawingId);
+          onRemoveMeasurement(selectedDrawingId);
+          onSelectDrawing(null);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [selectedDrawingId, onRemoveDrawing, onRemoveMeasurement, onSelectDrawing, onReturnToCursor]);
 
   // Redraw canvas on dependencies
   React.useEffect(() => {
@@ -101,16 +121,16 @@ export default function DrawingOverlayCanvas({
 
     // 1. Render persistent drawings
     drawings.forEach((drawing) => {
-      renderDrawingItem(ctx, drawing, timeToX, priceToY);
+      renderDrawingItem(ctx, drawing, selectedDrawingId === drawing.id, timeToX, priceToY);
     });
 
     // 2. Render measurements
     measurements.forEach((m) => {
-      renderMeasurementItem(ctx, m, timeToX, priceToY);
+      renderMeasurementItem(ctx, m, selectedDrawingId === m.id, timeToX, priceToY);
     });
 
     // 3. Render in-progress drawing preview
-    if (startPoint && currentMousePoint) {
+    if (isMouseCreating && startPoint && currentMousePoint) {
       renderInProgressPreview(ctx, activeDrawingTool, startPoint, currentMousePoint, timeToX, priceToY);
     }
 
@@ -130,6 +150,8 @@ export default function DrawingOverlayCanvas({
     activeDrawingTool,
     drawings,
     measurements,
+    selectedDrawingId,
+    isMouseCreating,
     startPoint,
     currentMousePoint,
     signals,
@@ -142,63 +164,74 @@ export default function DrawingOverlayCanvas({
     priceToY,
   ]);
 
-  // Click handler to create drawings / measurements
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (activeDrawingTool === 'cursor') return;
-
+  // Mouse Down: Start creating or dragging handle
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
     const time = xToTime(x);
     const price = yToPrice(y);
-
     if (time === null || price === null) return;
-    const clickedPoint: ChartPoint = { time, price };
+    const point: ChartPoint = { time, price };
 
-    // Single-click tools (Horizontal / Vertical line / Text)
+    // Check hit test for existing endpoint handles first (editing)
+    for (const m of measurements) {
+      const sx1 = timeToX(m.start.time);
+      const sy1 = priceToY(m.start.price);
+      const sx2 = timeToX(m.end.time);
+      const sy2 = priceToY(m.end.price);
+      if (sx1 !== null && sy1 !== null && Math.hypot(sx1 - x, sy1 - y) < 8) {
+        setActiveHandle({ type: 'measurement', id: m.id, pointIndex: 0 });
+        onSelectDrawing(m.id);
+        return;
+      }
+      if (sx2 !== null && sy2 !== null && Math.hypot(sx2 - x, sy2 - y) < 8) {
+        setActiveHandle({ type: 'measurement', id: m.id, pointIndex: 1 });
+        onSelectDrawing(m.id);
+        return;
+      }
+    }
+
+    for (const d of drawings) {
+      for (let i = 0; i < d.points.length; i++) {
+        const px = timeToX(d.points[i].time);
+        const py = priceToY(d.points[i].price);
+        if (px !== null && py !== null && Math.hypot(px - x, py - y) < 8) {
+          setActiveHandle({ type: 'drawing', id: d.id, pointIndex: i });
+          onSelectDrawing(d.id);
+          return;
+        }
+      }
+    }
+
+    if (activeDrawingTool === 'cursor') {
+      onSelectDrawing(null);
+      return;
+    }
+
+    // Single click tools
     if (activeDrawingTool === 'horizontalLine' || activeDrawingTool === 'verticalLine' || activeDrawingTool === 'text') {
       const textPrompt = activeDrawingTool === 'text' ? prompt('Enter annotation text:', 'Aegis Note') : undefined;
       const newDrawing: Drawing = {
         id: `draw-${Date.now()}`,
         type: activeDrawingTool,
-        points: [clickedPoint],
+        points: [point],
         text: textPrompt ?? undefined,
         style: { color: '#00e5ff', lineWidth: 1.5, lineStyle: 'solid' },
       };
       onAddDrawing(newDrawing);
-      setStartPoint(null);
-      setCurrentMousePoint(null);
+      onReturnToCursor();
       return;
     }
 
-    // Two-point tools (Ruler, Trendline, Ray, Rectangle, Arrow, Fibonacci)
-    if (!startPoint) {
-      setStartPoint(clickedPoint);
-    } else {
-      if (activeDrawingTool === 'ruler') {
-        const m = calculateMeasurement(startPoint, clickedPoint);
-        onAddMeasurement(m);
-      } else {
-        const newDrawing: Drawing = {
-          id: `draw-${Date.now()}`,
-          type: activeDrawingTool,
-          points: [startPoint, clickedPoint],
-          style: {
-            color: activeDrawingTool === 'fibonacci' ? '#8b5cf6' : '#00e5ff',
-            lineWidth: 1.5,
-            lineStyle: 'solid',
-            fillColor: 'rgba(0, 229, 255, 0.08)',
-          },
-        };
-        onAddDrawing(newDrawing);
-      }
-      setStartPoint(null);
-      setCurrentMousePoint(null);
-    }
+    // Two-point drag-to-create tools (Trendline, Ray, Rectangle, Arrow, Fibonacci, Ruler)
+    setIsMouseCreating(true);
+    setStartPoint(point);
+    setCurrentMousePoint(point);
   };
 
-  // Mouse move handler for hover cards and drawing preview
+  // Mouse Move: Update creation preview or handle position
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -208,10 +241,32 @@ export default function DrawingOverlayCanvas({
     const price = yToPrice(y);
 
     if (time !== null && price !== null) {
-      setCurrentMousePoint({ time, price });
+      const point: ChartPoint = { time, price };
+      setCurrentMousePoint(point);
+
+      // Handle dragging existing endpoint handle
+      if (activeHandle) {
+        if (activeHandle.type === 'drawing') {
+          const target = drawings.find((d) => d.id === activeHandle.id);
+          if (target) {
+            const newPoints = [...target.points];
+            newPoints[activeHandle.pointIndex] = point;
+            onUpdateDrawing({ ...target, points: newPoints });
+          }
+        } else if (activeHandle.type === 'measurement') {
+          const target = measurements.find((m) => m.id === activeHandle.id);
+          if (target) {
+            const start = activeHandle.pointIndex === 0 ? point : target.start;
+            const end = activeHandle.pointIndex === 1 ? point : target.end;
+            const updated = calculateMeasurement(start, end);
+            onUpdateMeasurement({ ...updated, id: target.id });
+          }
+        }
+        return;
+      }
     }
 
-    // Check hit test for signals / events / backtests hover cards
+    // Hover cards for Signals / Events / Backtests
     if (showSignals || showEvents || showBacktests) {
       let hitCard: { x: number; y: number; title: string; items: Array<{ label: string; value: string }> } | null = null;
 
@@ -281,6 +336,39 @@ export default function DrawingOverlayCanvas({
     }
   };
 
+  // Mouse Up: Finalize drawing creation or handle release
+  const handleMouseUp = () => {
+    if (activeHandle) {
+      setActiveHandle(null);
+      return;
+    }
+
+    if (isMouseCreating && startPoint && currentMousePoint) {
+      if (activeDrawingTool === 'ruler') {
+        const m = calculateMeasurement(startPoint, currentMousePoint);
+        onAddMeasurement(m);
+      } else if (activeDrawingTool !== 'cursor') {
+        const newDrawing: Drawing = {
+          id: `draw-${Date.now()}`,
+          type: activeDrawingTool,
+          points: [startPoint, currentMousePoint],
+          style: {
+            color: activeDrawingTool === 'fibonacci' ? '#8b5cf6' : '#00e5ff',
+            lineWidth: 1.5,
+            lineStyle: 'solid',
+            fillColor: 'rgba(0, 229, 255, 0.08)',
+          },
+        };
+        onAddDrawing(newDrawing);
+      }
+
+      setIsMouseCreating(false);
+      setStartPoint(null);
+      setCurrentMousePoint(null);
+      onReturnToCursor();
+    }
+  };
+
   const isCursorMode = activeDrawingTool === 'cursor';
 
   return (
@@ -291,15 +379,16 @@ export default function DrawingOverlayCanvas({
         left: 0,
         width,
         height,
-        pointerEvents: isCursorMode ? 'none' : 'auto',
+        pointerEvents: isCursorMode && !activeHandle ? 'none' : 'auto',
       }}
     >
       <canvas
         ref={canvasRef}
         width={width}
         height={height}
-        onClick={handleCanvasClick}
+        onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
         style={{
           cursor: activeDrawingTool !== 'cursor' ? 'crosshair' : 'default',
         }}
@@ -345,18 +434,27 @@ export default function DrawingOverlayCanvas({
 function renderDrawingItem(
   ctx: CanvasRenderingContext2D,
   drawing: Drawing,
+  isSelected: boolean,
   timeToX: (t: number) => number | null,
   priceToY: (p: number) => number | null
 ) {
   if (drawing.points.length === 0) return;
-  ctx.strokeStyle = drawing.style?.color ?? '#00e5ff';
+  ctx.strokeStyle = isSelected ? '#f59e0b' : drawing.style?.color ?? '#00e5ff';
   ctx.lineWidth = drawing.style?.lineWidth ?? 1.5;
-  ctx.fillStyle = drawing.style?.fillColor ?? 'rgba(0, 229, 255, 0.1)';
+  ctx.fillStyle = drawing.style?.fillColor ?? 'rgba(0, 229, 255, 0.08)';
 
   const p1 = drawing.points[0];
   const x1 = timeToX(p1.time);
   const y1 = priceToY(p1.price);
   if (x1 === null || y1 === null) return;
+
+  // Endpoint handles
+  if (isSelected) {
+    ctx.fillStyle = '#f59e0b';
+    ctx.beginPath();
+    ctx.arc(x1, y1, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   if (drawing.type === 'horizontalLine') {
     ctx.beginPath();
@@ -375,7 +473,7 @@ function renderDrawingItem(
   }
 
   if (drawing.type === 'text') {
-    ctx.fillStyle = drawing.style?.color ?? '#00e5ff';
+    ctx.fillStyle = isSelected ? '#f59e0b' : drawing.style?.color ?? '#00e5ff';
     ctx.font = '12px var(--font-mono, monospace)';
     ctx.fillText(drawing.text ?? 'Note', x1 + 4, y1 - 4);
     return;
@@ -387,11 +485,36 @@ function renderDrawingItem(
   const y2 = priceToY(p2.price);
   if (x2 === null || y2 === null) return;
 
+  if (isSelected) {
+    ctx.fillStyle = '#f59e0b';
+    ctx.beginPath();
+    ctx.arc(x2, y2, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   if (drawing.type === 'trendline') {
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
     ctx.stroke();
+  } else if (drawing.type === 'ray') {
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x1 + Math.cos(angle) * 2000, y1 + Math.sin(angle) * 2000);
+    ctx.stroke();
+  } else if (drawing.type === 'arrow') {
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    // Arrowhead
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - 10 * Math.cos(angle - Math.PI / 6), y2 - 10 * Math.sin(angle - Math.PI / 6));
+    ctx.lineTo(x2 - 10 * Math.cos(angle + Math.PI / 6), y2 - 10 * Math.sin(angle + Math.PI / 6));
+    ctx.fill();
   } else if (drawing.type === 'rectangle') {
     const rw = x2 - x1;
     const rh = y2 - y1;
@@ -421,6 +544,7 @@ function renderDrawingItem(
 function renderMeasurementItem(
   ctx: CanvasRenderingContext2D,
   m: MeasurementResult,
+  isSelected: boolean,
   timeToX: (t: number) => number | null,
   priceToY: (p: number) => number | null
 ) {
@@ -431,7 +555,7 @@ function renderMeasurementItem(
   if (x1 === null || y1 === null || x2 === null || y2 === null) return;
 
   // Dotted box and diagonal
-  ctx.strokeStyle = '#f59e0b';
+  ctx.strokeStyle = isSelected ? '#f59e0b' : '#f59e0b';
   ctx.lineWidth = 1.5;
   ctx.setLineDash([4, 4]);
   ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
@@ -444,8 +568,8 @@ function renderMeasurementItem(
   // Endpoint handles
   ctx.fillStyle = '#f59e0b';
   ctx.beginPath();
-  ctx.arc(x1, y1, 4, 0, Math.PI * 2);
-  ctx.arc(x2, y2, 4, 0, Math.PI * 2);
+  ctx.arc(x1, y1, 5, 0, Math.PI * 2);
+  ctx.arc(x2, y2, 5, 0, Math.PI * 2);
   ctx.fill();
 
   // Badge callout
@@ -482,11 +606,17 @@ function renderInProgressPreview(
   if (x1 === null || y1 === null || x2 === null || y2 === null) return;
 
   ctx.strokeStyle = 'rgba(0, 229, 255, 0.6)';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1.5;
   ctx.setLineDash([2, 2]);
 
   if (tool === 'ruler') {
     ctx.strokeStyle = 'rgba(245, 158, 11, 0.8)';
+    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  } else if (tool === 'rectangle') {
     ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
   } else {
     ctx.beginPath();
