@@ -88,9 +88,17 @@ export default function DrawingOverlayCanvas({
     items: Array<{ label: string; value: string }>;
   } | null>(null);
 
+  // Hovering interactive element state for dynamic pointerEvents in cursor mode
+  const [isHoveringInteractive, setIsHoveringInteractive] = React.useState(false);
+
   // Keyboard shortcut listener (Escape to return to cursor mode, Delete/Backspace to delete selected)
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+
       if (e.key === 'Escape') {
         setIsMouseCreating(false);
         setStartPoint(null);
@@ -181,12 +189,12 @@ export default function DrawingOverlayCanvas({
       const sy1 = priceToY(m.start.price);
       const sx2 = timeToX(m.end.time);
       const sy2 = priceToY(m.end.price);
-      if (sx1 !== null && sy1 !== null && Math.hypot(sx1 - x, sy1 - y) < 8) {
+      if (sx1 !== null && sy1 !== null && Math.hypot(sx1 - x, sy1 - y) < 12) {
         setActiveHandle({ type: 'measurement', id: m.id, pointIndex: 0 });
         onSelectDrawing(m.id);
         return;
       }
-      if (sx2 !== null && sy2 !== null && Math.hypot(sx2 - x, sy2 - y) < 8) {
+      if (sx2 !== null && sy2 !== null && Math.hypot(sx2 - x, sy2 - y) < 12) {
         setActiveHandle({ type: 'measurement', id: m.id, pointIndex: 1 });
         onSelectDrawing(m.id);
         return;
@@ -197,7 +205,7 @@ export default function DrawingOverlayCanvas({
       for (let i = 0; i < d.points.length; i++) {
         const px = timeToX(d.points[i].time);
         const py = priceToY(d.points[i].price);
-        if (px !== null && py !== null && Math.hypot(px - x, py - y) < 8) {
+        if (px !== null && py !== null && Math.hypot(px - x, py - y) < 12) {
           setActiveHandle({ type: 'drawing', id: d.id, pointIndex: i });
           onSelectDrawing(d.id);
           return;
@@ -231,7 +239,7 @@ export default function DrawingOverlayCanvas({
     setCurrentMousePoint(point);
   };
 
-  // Mouse Move: Update creation preview or handle position
+  // Mouse Move: Update creation preview, handle position, or hit detection
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -266,6 +274,33 @@ export default function DrawingOverlayCanvas({
       }
     }
 
+    // Hit test check for active handles / drawings / overlays to maintain interactive hover
+    let isHit = false;
+    for (const m of measurements) {
+      const sx1 = timeToX(m.start.time);
+      const sy1 = priceToY(m.start.price);
+      const sx2 = timeToX(m.end.time);
+      const sy2 = priceToY(m.end.price);
+      if ((sx1 !== null && sy1 !== null && Math.hypot(sx1 - x, sy1 - y) < 12) ||
+          (sx2 !== null && sy2 !== null && Math.hypot(sx2 - x, sy2 - y) < 12)) {
+        isHit = true;
+        break;
+      }
+    }
+    if (!isHit) {
+      for (const d of drawings) {
+        for (let i = 0; i < d.points.length; i++) {
+          const px = timeToX(d.points[i].time);
+          const py = priceToY(d.points[i].price);
+          if (px !== null && py !== null && Math.hypot(px - x, py - y) < 12) {
+            isHit = true;
+            break;
+          }
+        }
+        if (isHit) break;
+      }
+    }
+
     // Hover cards for Signals / Events / Backtests
     if (showSignals || showEvents || showBacktests) {
       let hitCard: { x: number; y: number; title: string; items: Array<{ label: string; value: string }> } | null = null;
@@ -275,6 +310,7 @@ export default function DrawingOverlayCanvas({
           const t = Math.floor(Date.parse(sig.market_timestamp) / 1000);
           const sx = timeToX(t);
           if (sx !== null && Math.abs(sx - x) < 14) {
+            isHit = true;
             hitCard = {
               x: sx,
               y: y - 10,
@@ -296,6 +332,7 @@ export default function DrawingOverlayCanvas({
           const t = typeof evt.timestamp === 'number' ? evt.timestamp : Math.floor(Date.parse(evt.timestamp) / 1000);
           const ex = timeToX(t);
           if (ex !== null && Math.abs(ex - x) < 14) {
+            isHit = true;
             hitCard = {
               x: ex,
               y: y - 10,
@@ -316,6 +353,7 @@ export default function DrawingOverlayCanvas({
           const t1 = typeof bt.entryTimestamp === 'number' ? bt.entryTimestamp : Math.floor(Date.parse(bt.entryTimestamp) / 1000);
           const bx = timeToX(t1);
           if (bx !== null && Math.abs(bx - x) < 14) {
+            isHit = true;
             hitCard = {
               x: bx,
               y: y - 10,
@@ -334,6 +372,8 @@ export default function DrawingOverlayCanvas({
 
       setHoverCard(hitCard);
     }
+
+    setIsHoveringInteractive(isHit);
   };
 
   // Mouse Up: Finalize drawing creation or handle release
@@ -379,7 +419,7 @@ export default function DrawingOverlayCanvas({
         left: 0,
         width,
         height,
-        pointerEvents: isCursorMode && !activeHandle ? 'none' : 'auto',
+        pointerEvents: isCursorMode && !activeHandle && !isHoveringInteractive && !selectedDrawingId ? 'none' : 'auto',
       }}
     >
       <canvas
@@ -390,7 +430,7 @@ export default function DrawingOverlayCanvas({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         style={{
-          cursor: activeDrawingTool !== 'cursor' ? 'crosshair' : 'default',
+          cursor: activeDrawingTool !== 'cursor' ? 'crosshair' : isHoveringInteractive ? 'pointer' : 'default',
         }}
       />
 
@@ -452,7 +492,7 @@ function renderDrawingItem(
   if (isSelected) {
     ctx.fillStyle = '#f59e0b';
     ctx.beginPath();
-    ctx.arc(x1, y1, 4, 0, Math.PI * 2);
+    ctx.arc(x1, y1, 5, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -488,7 +528,7 @@ function renderDrawingItem(
   if (isSelected) {
     ctx.fillStyle = '#f59e0b';
     ctx.beginPath();
-    ctx.arc(x2, y2, 4, 0, Math.PI * 2);
+    ctx.arc(x2, y2, 5, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -587,7 +627,7 @@ function renderMeasurementItem(
 
   ctx.fillStyle = '#94a3b8';
   ctx.font = '10px var(--font-mono, monospace)';
-  ctx.fillText(`${m.calendarDays}d (${m.tradingDays} session)`, midX, midY + 12);
+  ctx.fillText(m.formattedTimeSpan || `${m.calendarDays}d (${m.tradingDays} session)`, midX, midY + 12);
   ctx.textAlign = 'left';
 }
 
