@@ -200,10 +200,16 @@ class TestEquityCandleFallback:
 
     def test_finnhub_success_is_not_fallback(self) -> None:
         """When Finnhub returns valid candles, is_fallback must be False."""
+        import os
+
         get_mock = _make_get_mock(
             finnhub=_mock_response(200, _finnhub_ok()),
         )
-        with patch("httpx.AsyncClient.get", get_mock), TestClient(app) as client:
+        with (
+            patch.dict(os.environ, {"FINNHUB_API_KEY": "test_finnhub_key"}),
+            patch("httpx.AsyncClient.get", get_mock),
+            TestClient(app) as client,
+        ):
             resp = client.get("/api/market/ticker/AAPL/history")
 
         assert resp.status_code == 200

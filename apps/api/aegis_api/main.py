@@ -1088,36 +1088,55 @@ async def get_market_ticker(symbol: str) -> MarketTickerResponse:
 
 @app.get("/api/companies/{symbol}")
 async def get_company_intelligence(symbol: str) -> dict[str, Any]:
-    """Return provider-backed company profile and metrics without fabricated defaults."""
+    """Return provider-backed company profile and metrics with provenance tracking."""
     sym = symbol.upper().strip()
     finnhub_key = os.getenv("FINNHUB_API_KEY")
-    if not finnhub_key:
-        raise HTTPException(status_code=503, detail="FINNHUB_API_KEY is not configured")
-
     quote = await get_market_ticker(sym)
-    async with httpx.AsyncClient(timeout=8.0) as client:
-        profile_response = await client.get(
-            "https://finnhub.io/api/v1/stock/profile2",
-            params={"symbol": sym, "token": finnhub_key},
-        )
-        metrics_response = await client.get(
-            "https://finnhub.io/api/v1/stock/metric",
-            params={"symbol": sym, "metric": "all", "token": finnhub_key},
-        )
 
-    profile = profile_response.json() if profile_response.status_code == 200 else {}
-    metrics = (
-        metrics_response.json().get("metric", {}) if metrics_response.status_code == 200 else {}
-    )
+    profile: dict[str, Any] = {}
+    metrics: dict[str, Any] = {}
+
+    if finnhub_key:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            try:
+                profile_response = await client.get(
+                    "https://finnhub.io/api/v1/stock/profile2",
+                    params={"symbol": sym, "token": finnhub_key},
+                )
+                if profile_response.status_code == 200:
+                    profile = profile_response.json() or {}
+            except Exception as e:
+                logger.warning(f"Finnhub company profile fetch failed for {sym}: {e}")
+
+            try:
+                metrics_response = await client.get(
+                    "https://finnhub.io/api/v1/stock/metric",
+                    params={"symbol": sym, "metric": "all", "token": finnhub_key},
+                )
+                if metrics_response.status_code == 200:
+                    metrics = metrics_response.json().get("metric", {}) or {}
+            except Exception as e:
+                logger.warning(f"Finnhub company metrics fetch failed for {sym}: {e}")
+
+    now_iso = datetime.now(UTC).isoformat()
     return {
         "symbol": sym,
         "quote": quote.model_dump(),
         "profile": profile,
         "metrics": metrics,
-        "sources": {
-            "quote": quote.exchange,
-            "profile": "Finnhub" if profile else "unavailable",
-            "metrics": "Finnhub" if metrics else "unavailable",
+        "provenance": {
+            "retrieved_at": now_iso,
+            "is_fallback": quote.is_fallback or not bool(profile),
+            "fallback_reason": (
+                quote.fallback_reason
+                if quote.is_fallback
+                else ("Finnhub profile unavailable" if not profile else None)
+            ),
+            "sources": {
+                "quote": quote.exchange,
+                "profile": "Finnhub" if profile else "unavailable",
+                "metrics": "Finnhub" if metrics else "unavailable",
+            },
         },
     }
 

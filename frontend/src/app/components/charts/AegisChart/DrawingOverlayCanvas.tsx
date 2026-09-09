@@ -370,6 +370,7 @@ export default function DrawingOverlayCanvas({
   };
 
   const isCursorMode = activeDrawingTool === 'cursor';
+  const hasSelectedOrActive = selectedDrawingId !== null || activeHandle !== null;
 
   return (
     <div
@@ -379,7 +380,9 @@ export default function DrawingOverlayCanvas({
         left: 0,
         width,
         height,
-        pointerEvents: isCursorMode && !activeHandle ? 'none' : 'auto',
+        // In cursor mode without an active handle/selection, pass pointer events through to Lightweight Charts,
+        // unless mouse is interacting or a tool is selected.
+        pointerEvents: isCursorMode && !hasSelectedOrActive && !isMouseCreating ? 'none' : 'auto',
       }}
     >
       <canvas
@@ -390,7 +393,7 @@ export default function DrawingOverlayCanvas({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         style={{
-          cursor: activeDrawingTool !== 'cursor' ? 'crosshair' : 'default',
+          cursor: activeDrawingTool !== 'cursor' ? 'crosshair' : hasSelectedOrActive ? 'pointer' : 'default',
         }}
       />
 

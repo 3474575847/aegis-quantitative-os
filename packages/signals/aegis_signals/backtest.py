@@ -1,3 +1,4 @@
+import math
 from typing import Any
 
 import pandas as pd
@@ -9,18 +10,19 @@ def _sortino(returns: pd.Series, annualization: float) -> float:
     Downside deviation is the root-mean-square of negative returns relative to 0
     across all observations.
     """
-    if len(returns) < 2:
+    if len(returns) < 2 or returns.isna().all():
         return 0.0
     downside_diff = returns.clip(upper=0.0)
     downside_sq_sum = float((downside_diff**2).sum())
-    if downside_sq_sum <= 0.0:
-        # No negative returns in sample
+    if downside_sq_sum <= 0.0 or math.isnan(downside_sq_sum):
+        # No negative returns in sample or NaN
         return 0.0
     # Sample downside deviation across all N periods (ddof=1)
     downside_dev = (downside_sq_sum / (len(returns) - 1)) ** 0.5
-    if downside_dev == 0.0:
+    if downside_dev == 0.0 or math.isnan(downside_dev):
         return 0.0
-    return float((returns.mean() / downside_dev) * (annualization**0.5))
+    res = float((returns.mean() / downside_dev) * (annualization**0.5))
+    return res if math.isfinite(res) else 0.0
 
 
 def _cagr(equity_curve: pd.Series, annualization: float) -> float:
@@ -28,18 +30,22 @@ def _cagr(equity_curve: pd.Series, annualization: float) -> float:
     n = len(equity_curve)
     if n < 2:
         return 0.0
-    total_return = float(equity_curve.iloc[-1] / equity_curve.iloc[0])
-    if total_return <= 0.0:
+    start_val = float(equity_curve.iloc[0])
+    end_val = float(equity_curve.iloc[-1])
+    if start_val <= 0.0 or end_val <= 0.0:
         return -1.0
-    return float(total_return ** (annualization / n) - 1.0)
+    total_return = end_val / start_val
+    res = float(total_return ** (annualization / n) - 1.0)
+    return res if math.isfinite(res) else 0.0
 
 
 def _calmar(cagr: float, max_drawdown: float) -> float:
     """Calmar ratio: CAGR / abs(max drawdown). Returns 0 if drawdown is zero."""
-    if max_drawdown >= 0.0:
-        # No drawdown — return 0 rather than inf to avoid serialization issues
+    if max_drawdown >= 0.0 or not math.isfinite(cagr) or not math.isfinite(max_drawdown):
+        # No drawdown or non-finite inputs — return 0 rather than inf
         return 0.0
-    return cagr / abs(max_drawdown)
+    res = cagr / abs(max_drawdown)
+    return res if math.isfinite(res) else 0.0
 
 
 def run_signal_backtest(
