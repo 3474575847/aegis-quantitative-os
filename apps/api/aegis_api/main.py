@@ -105,6 +105,7 @@ class PortfolioScenarioResponse(BaseModel):
     holdings: list[dict[str, Any]]
     methodology: str
 
+
 app = FastAPI(
     title="Aegis-Alpha API",
     description="Institutional Quantitative Research & Signal Engine API",
@@ -168,16 +169,21 @@ async def get_system_status() -> dict[str, Any]:
             await session.execute(select(func.count()).select_from(SignalResultRecord))
         ).scalar_one()
         latest_worker_event = (
-            await session.execute(
-                select(EventLog)
-                .where(EventLog.event_type == "SensorRunCompleted")
-                .order_by(desc(EventLog.timestamp))
-                .limit(1)
+            (
+                await session.execute(
+                    select(EventLog)
+                    .where(EventLog.event_type == "SensorRunCompleted")
+                    .order_by(desc(EventLog.timestamp))
+                    .limit(1)
+                )
             )
-        ).scalars().first()
-        if latest_worker_event and (
-            datetime.now(UTC) - latest_worker_event.timestamp
-        ).total_seconds() < 60:
+            .scalars()
+            .first()
+        )
+        if (
+            latest_worker_event
+            and (datetime.now(UTC) - latest_worker_event.timestamp).total_seconds() < 60
+        ):
             worker_status = "UP"
 
     try:
@@ -191,9 +197,7 @@ async def get_system_status() -> dict[str, Any]:
         redis_status = "DOWN"
 
     overall_status = (
-        "OPERATIONAL"
-        if database_status == "UP" and worker_status == "UP"
-        else "DEGRADED"
+        "OPERATIONAL" if database_status == "UP" and worker_status == "UP" else "DEGRADED"
     )
     return {
         "status": overall_status,
@@ -251,21 +255,29 @@ async def get_signal_history(
 ) -> SignalHistoryResponse:
     async for session in db_manager.get_session():
         sig_def = (
-            await session.execute(
-                select(SignalDefinitionRecord).where(SignalDefinitionRecord.id == signal_id)
+            (
+                await session.execute(
+                    select(SignalDefinitionRecord).where(SignalDefinitionRecord.id == signal_id)
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if not sig_def:
             raise HTTPException(status_code=404, detail="Signal not found")
 
         records = (
-            await session.execute(
-                select(SignalResultRecord)
-                .where(SignalResultRecord.signal_id == signal_id)
-                .order_by(SignalResultRecord.timestamp.asc())
-                .limit(limit)
+            (
+                await session.execute(
+                    select(SignalResultRecord)
+                    .where(SignalResultRecord.signal_id == signal_id)
+                    .order_by(SignalResultRecord.timestamp.asc())
+                    .limit(limit)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         return SignalHistoryResponse(
             signal_id=str(sig_def.id),
@@ -306,10 +318,14 @@ async def run_backtest(
     records: list[SignalResultRecord] = []
     async for session in db_manager.get_session():
         signal_def = (
-            await session.execute(
-                select(SignalDefinitionRecord).where(SignalDefinitionRecord.id == signal_id)
+            (
+                await session.execute(
+                    select(SignalDefinitionRecord).where(SignalDefinitionRecord.id == signal_id)
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if not signal_def:
             raise HTTPException(status_code=404, detail="Signal not found")
         records = list(
@@ -319,27 +335,37 @@ async def run_backtest(
                     .where(SignalResultRecord.signal_id == signal_id)
                     .order_by(SignalResultRecord.timestamp.asc())
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
 
-    price_frame = pd.DataFrame(
-        {
-            "price": candle["close"],
-            "timestamp": pd.to_datetime(candle["time"], unit="s", utc=True),
-        }
-        for candle in candles
-    ).set_index("timestamp").sort_index()
+    price_frame = (
+        pd.DataFrame(
+            {
+                "price": candle["close"],
+                "timestamp": pd.to_datetime(candle["time"], unit="s", utc=True),
+            }
+            for candle in candles
+        )
+        .set_index("timestamp")
+        .sort_index()
+    )
     sym = symbol.upper().strip()
     price_frame.index = price_frame.index.as_unit("ns")
     signal_source = "stored point-in-time signal observations"
     if records:
-        signal_frame = pd.DataFrame(
-            {
-                "signal": record.value,
-                "timestamp": pd.to_datetime(record.timestamp, utc=True),
-            }
-            for record in records
-        ).set_index("timestamp").sort_index()
+        signal_frame = (
+            pd.DataFrame(
+                {
+                    "signal": record.value,
+                    "timestamp": pd.to_datetime(record.timestamp, utc=True),
+                }
+                for record in records
+            )
+            .set_index("timestamp")
+            .sort_index()
+        )
         signal_frame.index = signal_frame.index.as_unit("ns")
         aligned = pd.merge_asof(
             price_frame,
@@ -380,8 +406,7 @@ async def run_backtest(
         raise HTTPException(status_code=422, detail=str(error)) from error
 
     methodology = (
-        f"{signal_source}; signal at t positions at t+1 close; "
-        "costs deducted on position changes"
+        f"{signal_source}; signal at t positions at t+1 close; costs deducted on position changes"
     )
 
     # Optionally persist as an experiment run
@@ -448,22 +473,24 @@ async def list_experiments() -> list[ExperimentSummaryResponse]:
                     best_sharpe = sharpe
 
             params = exp.parameters or {}
-            output.append(ExperimentSummaryResponse(
-                experiment_id=str(exp.experiment_id),
-                name=exp.name,
-                description=exp.description,
-                signal_id=params.get("signal_id"),
-                symbol=params.get("symbol", "BTC"),
-                transaction_cost_bps=float(params.get("transaction_cost_bps", 5.0)),
-                slippage_bps=float(params.get("slippage_bps", 0.0)),
-                tags=exp.tags or [],
-                created_at=exp.created_at.isoformat() if exp.created_at else None,
-                run_count=m["run_count"],
-                success_rate=round(m["success_rate"] * 100, 1),
-                latest_status=latest_run.status if latest_run else "NONE",
-                latest_run_id=str(latest_run.run_id) if latest_run else None,
-                best_sharpe=round(best_sharpe, 4) if best_sharpe is not None else None,
-            ))
+            output.append(
+                ExperimentSummaryResponse(
+                    experiment_id=str(exp.experiment_id),
+                    name=exp.name,
+                    description=exp.description,
+                    signal_id=params.get("signal_id"),
+                    symbol=params.get("symbol", "BTC"),
+                    transaction_cost_bps=float(params.get("transaction_cost_bps", 5.0)),
+                    slippage_bps=float(params.get("slippage_bps", 0.0)),
+                    tags=exp.tags or [],
+                    created_at=exp.created_at.isoformat() if exp.created_at else None,
+                    run_count=m["run_count"],
+                    success_rate=round(m["success_rate"] * 100, 1),
+                    latest_status=latest_run.status if latest_run else "NONE",
+                    latest_run_id=str(latest_run.run_id) if latest_run else None,
+                    best_sharpe=round(best_sharpe, 4) if best_sharpe is not None else None,
+                )
+            )
         return output
     return []
 
@@ -584,9 +611,7 @@ async def _compare_experiments_by_ids(experiment_id_strs: list[str]) -> Experime
                     stmt = select(SignalDefinitionRecord).where(
                         SignalDefinitionRecord.id == sig_uuid
                     )
-                    sig_record = (
-                        await session.execute(stmt)
-                    ).scalars().first()
+                    sig_record = (await session.execute(stmt)).scalars().first()
                     if sig_record:
                         sig_name = sig_record.name
                 except Exception:
@@ -782,20 +807,15 @@ async def clone_experiment(
 
     src_params = source.parameters or {}
     chosen_signal_id = signal_id if signal_id is not None else src_params.get("signal_id")
-    chosen_symbol = (
-        (symbol.upper().strip() if symbol else None)
-        or str(src_params.get("symbol", "BTC"))
+    chosen_symbol = (symbol.upper().strip() if symbol else None) or str(
+        src_params.get("symbol", "BTC")
     )
     chosen_cost = (
         transaction_cost_bps
         if transaction_cost_bps is not None
         else src_params.get("transaction_cost_bps", 5.0)
     )
-    chosen_slip = (
-        slippage_bps
-        if slippage_bps is not None
-        else src_params.get("slippage_bps", 0.0)
-    )
+    chosen_slip = slippage_bps if slippage_bps is not None else src_params.get("slippage_bps", 0.0)
 
     clone_req = ExperimentCreateRequest(
         name=name,
@@ -836,10 +856,14 @@ async def get_experiment_runs(experiment_id: uuid.UUID) -> list[dict[str, Any]]:
 async def list_events(limit: int = Query(default=50, le=200)) -> list[EventLogResponse]:
     async for session in db_manager.get_session():
         events = (
-            await session.execute(
-                select(EventLog).order_by(desc(EventLog.timestamp)).limit(limit)
+            (
+                await session.execute(
+                    select(EventLog).order_by(desc(EventLog.timestamp)).limit(limit)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         return [
             EventLogResponse(
@@ -875,9 +899,7 @@ async def get_latest_news(
     """
     async for session in db_manager.get_session():
         repo = NewsRepository(session)
-        records = await repo.get_latest_canonical(
-            limit=limit, min_corroboration=min_corroboration
-        )
+        records = await repo.get_latest_canonical(limit=limit, min_corroboration=min_corroboration)
         return [CanonicalNewsArticleResponse.from_record(r) for r in records]
     return []
 
@@ -902,9 +924,7 @@ async def get_news_by_symbol(
 
     async for session in db_manager.get_session():
         repo = NewsRepository(session)
-        records = await repo.get_latest_for_symbol(
-            symbol=canonical_symbol, limit=limit
-        )
+        records = await repo.get_latest_for_symbol(symbol=canonical_symbol, limit=limit)
         return [CanonicalNewsArticleResponse.from_record(r) for r in records]
     return []
 
@@ -956,9 +976,7 @@ async def get_market_ticker(symbol: str) -> MarketTickerResponse:
                     data = res.json().get("data", {})
                     price = float(data.get("amount", 0.0))
                     z_sig = (
-                        round((price - 60000.0) / 10000.0, 4)
-                        if coin_symbol == "BTC"
-                        else 0.4215
+                        round((price - 60000.0) / 10000.0, 4) if coin_symbol == "BTC" else 0.4215
                     )
                     quote = MarketTickerResponse(
                         symbol=sym,
@@ -1026,9 +1044,7 @@ async def get_market_ticker(symbol: str) -> MarketTickerResponse:
                     if price > 0:
                         prev_close = float(meta.get("chartPreviousClose", price))
                         change_pct = (
-                            ((price - prev_close) / prev_close) * 100
-                            if prev_close
-                            else 0.0
+                            ((price - prev_close) / prev_close) * 100 if prev_close else 0.0
                         )
                         quote = MarketTickerResponse(
                             symbol=sym,
@@ -1091,9 +1107,7 @@ async def get_company_intelligence(symbol: str) -> dict[str, Any]:
 
     profile = profile_response.json() if profile_response.status_code == 200 else {}
     metrics = (
-        metrics_response.json().get("metric", {})
-        if metrics_response.status_code == 200
-        else {}
+        metrics_response.json().get("metric", {}) if metrics_response.status_code == 200 else {}
     )
     return {
         "symbol": sym,
@@ -1112,10 +1126,7 @@ async def get_company_intelligence(symbol: str) -> dict[str, Any]:
 async def portfolio_scenario(request: PortfolioScenarioRequest) -> PortfolioScenarioResponse:
     """Calculate weighted scenario impact from live quote-backed holdings."""
     total_weight = sum(request.holdings.values())
-    if (
-        any(weight < 0 for weight in request.holdings.values())
-        or abs(total_weight - 1.0) > 0.001
-    ):
+    if any(weight < 0 for weight in request.holdings.values()) or abs(total_weight - 1.0) > 0.001:
         raise HTTPException(
             status_code=422,
             detail="Holding weights must be non-negative and sum to 1",
@@ -1127,15 +1138,17 @@ async def portfolio_scenario(request: PortfolioScenarioRequest) -> PortfolioScen
     for (symbol, weight), quote in zip(request.holdings.items(), quotes, strict=False):
         shock = float(request.shocks.get(symbol.upper(), 0.0))
         weighted_shock += weight * shock
-        holdings.append({
-            "symbol": symbol.upper(),
-            "weight": weight,
-            "price": quote.price,
-            "provider": quote.exchange,
-            "is_fallback": quote.is_fallback,
-            "fallback_reason": quote.fallback_reason,
-            "scenario_shock": shock,
-        })
+        holdings.append(
+            {
+                "symbol": symbol.upper(),
+                "weight": weight,
+                "price": quote.price,
+                "provider": quote.exchange,
+                "is_fallback": quote.is_fallback,
+                "fallback_reason": quote.fallback_reason,
+                "scenario_shock": shock,
+            }
+        )
 
     return PortfolioScenarioResponse(
         portfolio_value=1.0,
@@ -1160,12 +1173,16 @@ async def get_market_ticker_history(symbol: str) -> dict[str, Any]:
 
     async for session in db_manager.get_session():
         sentiment_definition = (
-            await session.execute(
-                select(SignalDefinitionRecord).where(
-                    SignalDefinitionRecord.name == "REDDIT_SENTIMENT_LEAD"
+            (
+                await session.execute(
+                    select(SignalDefinitionRecord).where(
+                        SignalDefinitionRecord.name == "REDDIT_SENTIMENT_LEAD"
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if sentiment_definition:
             sentiment_records = list(
                 (
@@ -1173,8 +1190,7 @@ async def get_market_ticker_history(symbol: str) -> dict[str, Any]:
                         select(SignalResultRecord)
                         .where(SignalResultRecord.signal_id == sentiment_definition.id)
                         .where(
-                            SignalResultRecord.timestamp
-                            >= datetime.fromtimestamp(start, tz=UTC)
+                            SignalResultRecord.timestamp >= datetime.fromtimestamp(start, tz=UTC)
                         )
                         .order_by(SignalResultRecord.timestamp.asc())
                     )
@@ -1210,17 +1226,19 @@ async def get_market_ticker_history(symbol: str) -> dict[str, Any]:
                 raise HTTPException(status_code=502, detail="Coinbase candle feed unavailable")
             candles = sorted(response.json(), key=lambda candle: candle[0])
             for timestamp, low, high, open_price, close, volume in candles:
-                datapoints.append({
-                    "timestamp": datetime.fromtimestamp(timestamp, tz=UTC).strftime("%H:%M"),
-                    "time": timestamp,
-                    "open": open_price,
-                    "high": high,
-                    "low": low,
-                    "close": close,
-                    "price": close,
-                    "volume": volume,
-                    "sentimentZ": sentiment_at(timestamp),
-                })
+                datapoints.append(
+                    {
+                        "timestamp": datetime.fromtimestamp(timestamp, tz=UTC).strftime("%H:%M"),
+                        "time": timestamp,
+                        "open": open_price,
+                        "high": high,
+                        "low": low,
+                        "close": close,
+                        "price": close,
+                        "volume": volume,
+                        "sentimentZ": sentiment_at(timestamp),
+                    }
+                )
             candle_source = "Coinbase candles"
         else:
             finnhub_key = os.getenv("FINNHUB_API_KEY")
@@ -1244,23 +1262,30 @@ async def get_market_ticker_history(symbol: str) -> dict[str, Any]:
                         payload = response.json()
                         if payload.get("s") == "ok" and payload.get("t"):
                             for ts, op, hi, lo, cl, vo in zip(
-                                payload["t"], payload["o"], payload["h"],
-                                payload["l"], payload["c"], payload["v"],
+                                payload["t"],
+                                payload["o"],
+                                payload["h"],
+                                payload["l"],
+                                payload["c"],
+                                payload["v"],
                                 strict=False,
                             ):
-                                datapoints.append({
-                                    "timestamp": datetime.fromtimestamp(
-                                        ts, tz=UTC,
-                                    ).strftime("%H:%M"),
-                                    "time": ts,
-                                    "open": op,
-                                    "high": hi,
-                                    "low": lo,
-                                    "close": cl,
-                                    "price": cl,
-                                    "volume": vo,
-                                    "sentimentZ": sentiment_at(ts),
-                                })
+                                datapoints.append(
+                                    {
+                                        "timestamp": datetime.fromtimestamp(
+                                            ts,
+                                            tz=UTC,
+                                        ).strftime("%H:%M"),
+                                        "time": ts,
+                                        "open": op,
+                                        "high": hi,
+                                        "low": lo,
+                                        "close": cl,
+                                        "price": cl,
+                                        "volume": vo,
+                                        "sentimentZ": sentiment_at(ts),
+                                    }
+                                )
                             candle_source = "Finnhub candles"
                             finnhub_ok = True
                         else:
@@ -1302,34 +1327,42 @@ async def get_market_ticker_history(symbol: str) -> dict[str, Any]:
                         if results:
                             r = results[0]
                             timestamps: list[int] = r.get("timestamp") or []
-                            quotes_block: dict[str, Any] = (
-                                r.get("indicators", {}).get("quote", [{}])[0]
-                            )
-                            opens  = quotes_block.get("open")  or []
-                            highs  = quotes_block.get("high")  or []
-                            lows   = quotes_block.get("low")   or []
+                            quotes_block: dict[str, Any] = r.get("indicators", {}).get(
+                                "quote", [{}]
+                            )[0]
+                            opens = quotes_block.get("open") or []
+                            highs = quotes_block.get("high") or []
+                            lows = quotes_block.get("low") or []
                             closes = quotes_block.get("close") or []
                             volumes = quotes_block.get("volume") or []
                             for ts, op, hi, lo, cl, vo in zip(
-                                timestamps, opens, highs, lows, closes, volumes,
+                                timestamps,
+                                opens,
+                                highs,
+                                lows,
+                                closes,
+                                volumes,
                                 strict=False,
                             ):
                                 # Yahoo returns None for extended-hours gaps — skip them
                                 if None in (op, hi, lo, cl):
                                     continue
-                                datapoints.append({
-                                    "timestamp": datetime.fromtimestamp(
-                                        ts, tz=UTC,
-                                    ).strftime("%H:%M"),
-                                    "time": ts,
-                                    "open": round(float(op), 4),
-                                    "high": round(float(hi), 4),
-                                    "low":  round(float(lo), 4),
-                                    "close": round(float(cl), 4),
-                                    "price": round(float(cl), 4),
-                                    "volume": int(vo) if vo is not None else 0,
-                                    "sentimentZ": sentiment_at(ts),
-                                })
+                                datapoints.append(
+                                    {
+                                        "timestamp": datetime.fromtimestamp(
+                                            ts,
+                                            tz=UTC,
+                                        ).strftime("%H:%M"),
+                                        "time": ts,
+                                        "open": round(float(op), 4),
+                                        "high": round(float(hi), 4),
+                                        "low": round(float(lo), 4),
+                                        "close": round(float(cl), 4),
+                                        "price": round(float(cl), 4),
+                                        "volume": int(vo) if vo is not None else 0,
+                                        "sentimentZ": sentiment_at(ts),
+                                    }
+                                )
                             candle_source = "Yahoo Finance candles (fallback)"
                         else:
                             logger.warning("Yahoo Finance returned no chart result for %s", sym)
@@ -1353,22 +1386,24 @@ async def get_market_ticker_history(symbol: str) -> dict[str, Any]:
                         for row in csv.DictReader(io.StringIO(stooq_response.text)):
                             if not row.get("Date") or row.get("Close") in {None, "N/D"}:
                                 continue
-                            candle_time = datetime.strptime(
-                                row["Date"], "%Y-%m-%d"
-                            ).replace(tzinfo=UTC)
+                            candle_time = datetime.strptime(row["Date"], "%Y-%m-%d").replace(
+                                tzinfo=UTC
+                            )
                             timestamp = int(candle_time.timestamp())
                             close = float(row["Close"])
-                            datapoints.append({
-                                "timestamp": row["Date"],
-                                "time": timestamp,
-                                "open": float(row.get("Open") or close),
-                                "high": float(row.get("High") or close),
-                                "low": float(row.get("Low") or close),
-                                "close": close,
-                                "price": close,
-                                "volume": int(float(row.get("Volume") or 0)),
-                                "sentimentZ": sentiment_at(timestamp),
-                            })
+                            datapoints.append(
+                                {
+                                    "timestamp": row["Date"],
+                                    "time": timestamp,
+                                    "open": float(row.get("Open") or close),
+                                    "high": float(row.get("High") or close),
+                                    "low": float(row.get("Low") or close),
+                                    "close": close,
+                                    "price": close,
+                                    "volume": int(float(row.get("Volume") or 0)),
+                                    "sentimentZ": sentiment_at(timestamp),
+                                }
+                            )
                         if datapoints:
                             candle_source = "Stooq daily candles (fallback)"
                     else:
@@ -1390,7 +1425,8 @@ async def get_market_ticker_history(symbol: str) -> dict[str, Any]:
         "source": candle_source,
         "is_fallback": is_fallback_candle,
         "fallback_reason": (
-            None if not is_fallback_candle
+            None
+            if not is_fallback_candle
             else (
                 f"Finnhub candles unavailable; {candle_source} used as fallback"
                 if datapoints
@@ -1400,11 +1436,10 @@ async def get_market_ticker_history(symbol: str) -> dict[str, Any]:
     }
 
 
-
-
 # ---------------------------------------------------------------------------
 # Macro / Regime helpers
 # ---------------------------------------------------------------------------
+
 
 def _record_to_series_point(rec: MacroObservationRecord) -> MacroSeriesPoint:
     return MacroSeriesPoint(
@@ -1445,8 +1480,8 @@ def _classify_regime(
         values = [r.value for r in rows if r.value is not None]
         if len(values) < 4:
             return "UNKNOWN", None
-        change = values[-1] - values[-4]   # approx 3-month change
-        threshold = 0.05                   # ignore sub-5bp noise
+        change = values[-1] - values[-4]  # approx 3-month change
+        threshold = 0.05  # ignore sub-5bp noise
         if abs(change) < threshold:
             direction = "FLAT"
         elif change > 0:
@@ -1492,6 +1527,7 @@ def _classify_regime(
 # Macro endpoints
 # ---------------------------------------------------------------------------
 
+
 @app.get("/api/macro/yields", response_model=YieldCurveResponse)
 async def get_yield_curve() -> YieldCurveResponse:
     """
@@ -1534,8 +1570,12 @@ async def get_yield_curve() -> YieldCurveResponse:
         )
     # Fallback: DB unavailable
     return YieldCurveResponse(
-        dgs10=None, dgs2=None, fedfunds=None,
-        slope_bps=None, is_inverted=False, credit_spread=None,
+        dgs10=None,
+        dgs2=None,
+        fedfunds=None,
+        slope_bps=None,
+        is_inverted=False,
+        credit_spread=None,
         retrieved_at=now_iso,
     )
 
@@ -1624,9 +1664,9 @@ async def _build_news_momentum(symbol: str) -> dict[str, Any]:
                         open_price, high, low, close = (float(value) for value in values)
                         rebuilt.append(
                             {
-                                "timestamp": datetime.fromtimestamp(
-                                    timestamp, tz=UTC
-                                ).strftime("%H:%M"),
+                                "timestamp": datetime.fromtimestamp(timestamp, tz=UTC).strftime(
+                                    "%H:%M"
+                                ),
                                 "time": timestamp,
                                 "open": open_price,
                                 "high": high,
@@ -1646,13 +1686,17 @@ async def _build_news_momentum(symbol: str) -> dict[str, Any]:
     if len(candles) < 2:
         raise HTTPException(status_code=422, detail="Insufficient real market history")
 
-    price_frame = pd.DataFrame(
-        {
-            "price": candle["close"],
-            "timestamp": pd.to_datetime(candle["time"], unit="s", utc=True),
-        }
-        for candle in candles
-    ).set_index("timestamp").sort_index()
+    price_frame = (
+        pd.DataFrame(
+            {
+                "price": candle["close"],
+                "timestamp": pd.to_datetime(candle["time"], unit="s", utc=True),
+            }
+            for candle in candles
+        )
+        .set_index("timestamp")
+        .sort_index()
+    )
     price_frame.index = price_frame.index.as_unit("ns")
     price_frame["momentum"] = price_frame["price"].pct_change()
 
@@ -1762,15 +1806,21 @@ async def backtest_news_momentum(
         name="price",
     ).sort_index()
     prices.index = prices.index.as_unit("ns")
-    signal_frame = pd.DataFrame(
-        {
-            "timestamp": pd.to_datetime([item["market_timestamp"] for item in signals], utc=True),
-            "signal": [
-                1.0 if item["action"] == "BUY" else -1.0 if item["action"] == "SELL" else 0.0
-                for item in signals
-            ],
-        }
-    ).set_index("timestamp").sort_index()
+    signal_frame = (
+        pd.DataFrame(
+            {
+                "timestamp": pd.to_datetime(
+                    [item["market_timestamp"] for item in signals], utc=True
+                ),
+                "signal": [
+                    1.0 if item["action"] == "BUY" else -1.0 if item["action"] == "SELL" else 0.0
+                    for item in signals
+                ],
+            }
+        )
+        .set_index("timestamp")
+        .sort_index()
+    )
     signal_frame.index = signal_frame.index.as_unit("ns")
     aligned = pd.merge_asof(
         prices.to_frame(), signal_frame, left_index=True, right_index=True, direction="backward"

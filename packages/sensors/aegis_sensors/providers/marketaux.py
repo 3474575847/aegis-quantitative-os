@@ -71,9 +71,7 @@ class MarketauxNewsProvider(NewsDataProvider):
             try:
                 pub_str = raw.get("published_at")
                 published_at = (
-                    datetime.fromisoformat(pub_str.replace("Z", "+00:00"))
-                    if pub_str
-                    else now
+                    datetime.fromisoformat(pub_str.replace("Z", "+00:00")) if pub_str else now
                 )
                 # Invariant: available_at is when Aegis observed/received it
                 available_at = now
@@ -97,8 +95,10 @@ class MarketauxNewsProvider(NewsDataProvider):
                     if scores:
                         sentiment_score = sum(scores) / len(scores)
                         sentiment_label = (
-                            "positive" if sentiment_score > 0.1
-                            else "negative" if sentiment_score < -0.1
+                            "positive"
+                            if sentiment_score > 0.1
+                            else "negative"
+                            if sentiment_score < -0.1
                             else "neutral"
                         )
 
@@ -148,17 +148,11 @@ class MarketauxNewsProvider(NewsDataProvider):
         return await self._fetch({"limit": min(limit, 50), "language": "en"})
 
     async def search_news(self, query: str, limit: int = 50) -> list[NewsArticle]:
-        return await self._fetch(
-            {"search": query, "limit": min(limit, 50), "language": "en"}
-        )
+        return await self._fetch({"search": query, "limit": min(limit, 50), "language": "en"})
 
     async def get_company_news(self, symbol: str, limit: int = 50) -> list[NewsArticle]:
         clean_sym = symbol.upper().replace("-USD", "")
-        return await self._fetch(
-            {"symbols": clean_sym, "limit": min(limit, 50), "language": "en"}
-        )
+        return await self._fetch({"symbols": clean_sym, "limit": min(limit, 50), "language": "en"})
 
     async def get_topic_news(self, topic: str, limit: int = 50) -> list[NewsArticle]:
-        return await self._fetch(
-            {"search": topic, "limit": min(limit, 50), "language": "en"}
-        )
+        return await self._fetch({"search": topic, "limit": min(limit, 50), "language": "en"})

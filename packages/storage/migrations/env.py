@@ -2,10 +2,10 @@ import asyncio
 import os
 from logging.config import fileConfig
 
-import aegis_storage.models.events  # noqa: F401
-import aegis_storage.models.experimentation  # noqa: F401
-import aegis_storage.models.macro  # noqa: F401
-import aegis_storage.models.news  # noqa: F401
+import aegis_storage.models.events
+import aegis_storage.models.experimentation
+import aegis_storage.models.macro
+import aegis_storage.models.news
 import aegis_storage.models.signals  # noqa: F401
 from aegis_storage.models.base import Base
 from alembic import context

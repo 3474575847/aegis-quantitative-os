@@ -39,11 +39,13 @@ class NewsDataProvider(ABC):
 
     def record_success(self) -> None:
         from datetime import UTC, datetime
+
         self._last_successful_fetch = datetime.now(UTC).isoformat()
         self._consecutive_failures = 0
 
     def record_failure(self, error: Exception) -> None:
         from datetime import UTC, datetime
+
         self._last_failure = f"{datetime.now(UTC).isoformat()}: {error}"
         self._consecutive_failures += 1
         logger.warning(

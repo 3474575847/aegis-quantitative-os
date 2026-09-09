@@ -34,18 +34,14 @@ class MacroObservationRecord(Base):
         Index("ix_macro_available_at", "available_at"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        primary_key=True, default=uuid.uuid4, index=True
-    )
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4, index=True)
     series_id: Mapped[str] = mapped_column(String(32), nullable=False)
     series_name: Mapped[str] = mapped_column(String(255), nullable=False)
     unit: Mapped[str] = mapped_column(String(64), nullable=False)
     category: Mapped[str] = mapped_column(String(64), nullable=False)
 
     # The date this observation refers to (e.g. 2024-09-01 for monthly CPI)
-    observation_date: Mapped[date] = mapped_column(
-        Date, primary_key=True, nullable=False
-    )
+    observation_date: Mapped[date] = mapped_column(Date, primary_key=True, nullable=False)
 
     # Numeric value; NULL when FRED has not yet published
     value: Mapped[float | None] = mapped_column(Float, nullable=True)

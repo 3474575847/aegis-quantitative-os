@@ -85,9 +85,7 @@ def _build_canonical_record(
         summary=None,
         primary_url=canonical.canonical_url,
         primary_publisher=(
-            canonical.independent_publishers[0]
-            if canonical.independent_publishers
-            else "unknown"
+            canonical.independent_publishers[0] if canonical.independent_publishers else "unknown"
         ),
         publisher_count=canonical.independent_publisher_count,
         first_published_at=canonical.published_at,

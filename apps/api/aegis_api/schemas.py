@@ -71,11 +71,13 @@ class EventLogResponse(BaseModel):
 # Experiment schemas
 # ---------------------------------------------------------------------------
 
+
 class ExperimentCreateRequest(BaseModel):
     """Create a new named experiment definition."""
+
     name: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=1024)
-    signal_id: str | None = None          # UUID string — the signal this experiment tests
+    signal_id: str | None = None  # UUID string — the signal this experiment tests
     symbol: str = Field(default="BTC")
     transaction_cost_bps: float = Field(default=5.0, ge=0, le=500)
     slippage_bps: float = Field(default=0.0, ge=0, le=500)
@@ -86,6 +88,7 @@ class ExperimentCreateRequest(BaseModel):
 
 class ExperimentRunResponse(BaseModel):
     """Result of a completed experiment run."""
+
     run_id: str
     experiment_id: str
     experiment_name: str
@@ -100,6 +103,7 @@ class ExperimentRunResponse(BaseModel):
 
 class ExperimentSummaryResponse(BaseModel):
     """Summary of an experiment definition with aggregate run stats."""
+
     experiment_id: str
     name: str
     description: str | None
@@ -144,8 +148,10 @@ class ExperimentCompareResponse(BaseModel):
 # News schemas (P0.4)
 # ---------------------------------------------------------------------------
 
+
 class RawNewsArticleResponse(BaseModel):
     """Single raw provider observation within a canonical cluster."""
+
     id: str
     provider_id: str
     headline: str
@@ -181,6 +187,7 @@ class CanonicalNewsArticleResponse(BaseModel):
     - corroboration_score: 0.50 (1 publisher) → 0.75 (2) → 0.95 (3+).
     - entities: canonical ticker/asset symbols resolved by EntityResolver.
     """
+
     cluster_id: str
     primary_headline: str
     primary_url: str
@@ -212,6 +219,7 @@ class CanonicalNewsArticleResponse(BaseModel):
 
 class NewsClusterDetailResponse(BaseModel):
     """Full cluster detail: canonical article + all constituent raw observations."""
+
     canonical: CanonicalNewsArticleResponse
     raw_articles: list[RawNewsArticleResponse]
     raw_article_count: int
@@ -221,15 +229,17 @@ class NewsClusterDetailResponse(BaseModel):
 # Macro schemas (P1.1)
 # ---------------------------------------------------------------------------
 
+
 class MacroSeriesPoint(BaseModel):
     """A single time-series observation for a macro indicator."""
+
     series_id: str
     series_name: str
     unit: str
     category: str
-    observation_date: str          # ISO date string, e.g. "2024-09-01"
+    observation_date: str  # ISO date string, e.g. "2024-09-01"
     value: float | None
-    available_at: str              # PIT retrieval timestamp
+    available_at: str  # PIT retrieval timestamp
     provider: str
 
 
@@ -244,12 +254,13 @@ class YieldCurveResponse(BaseModel):
 
     All values are as-of the most recent FRED publication retrieved by Aegis.
     """
+
     dgs10: MacroSeriesPoint | None
     dgs2: MacroSeriesPoint | None
     fedfunds: MacroSeriesPoint | None
-    slope_bps: float | None        # (DGS10 - DGS2) * 100 in basis points
+    slope_bps: float | None  # (DGS10 - DGS2) * 100 in basis points
     is_inverted: bool
-    credit_spread: MacroSeriesPoint | None   # BAMLH0A0HYM2
+    credit_spread: MacroSeriesPoint | None  # BAMLH0A0HYM2
     retrieved_at: str
 
 
@@ -265,13 +276,14 @@ class RegimeClassification(BaseModel):
 
     When fewer than 4 months of data exist the regime is UNKNOWN.
     """
-    regime: str                    # One of the 4 quadrant names or UNKNOWN
-    growth_direction: str          # UP / DOWN / FLAT / UNKNOWN
-    inflation_direction: str       # UP / DOWN / FLAT / UNKNOWN
-    growth_indicator: MacroSeriesPoint | None    # Latest UNRATE
-    inflation_indicator: MacroSeriesPoint | None # Latest CPIAUCSL
-    growth_change_3m: float | None               # 3-month absolute change in UNRATE
-    inflation_change_3m: float | None            # 3-month absolute change in CPIAUCSL
-    confidence: str                # HIGH / MEDIUM / LOW
+
+    regime: str  # One of the 4 quadrant names or UNKNOWN
+    growth_direction: str  # UP / DOWN / FLAT / UNKNOWN
+    inflation_direction: str  # UP / DOWN / FLAT / UNKNOWN
+    growth_indicator: MacroSeriesPoint | None  # Latest UNRATE
+    inflation_indicator: MacroSeriesPoint | None  # Latest CPIAUCSL
+    growth_change_3m: float | None  # 3-month absolute change in UNRATE
+    inflation_change_3m: float | None  # 3-month absolute change in CPIAUCSL
+    confidence: str  # HIGH / MEDIUM / LOW
     methodology: str
     classified_at: str

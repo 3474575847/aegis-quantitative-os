@@ -31,14 +31,10 @@ class NewsMomentumStrategy:
         factor_values: dict[str, float] | None = None,
     ) -> dict[str, Any]:
         sentiment_direction = (
-            sentiment_z >= self.config.positive_sentiment_z
-            if pd.notna(sentiment_z)
-            else False
+            sentiment_z >= self.config.positive_sentiment_z if pd.notna(sentiment_z) else False
         )
         negative_direction = (
-            sentiment_z <= self.config.negative_sentiment_z
-            if pd.notna(sentiment_z)
-            else False
+            sentiment_z <= self.config.negative_sentiment_z if pd.notna(sentiment_z) else False
         )
         positive_momentum = momentum > self.config.min_momentum
         negative_momentum = momentum < -self.config.min_momentum

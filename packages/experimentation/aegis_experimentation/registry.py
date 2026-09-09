@@ -22,9 +22,7 @@ class ExperimentRegistry:
     def __init__(self, session: AsyncSession):
         self.repository = ExperimentRepository(session)
 
-    async def register_experiment(
-        self, definition: ExperimentDefinition
-    ) -> ExperimentDefinition:
+    async def register_experiment(self, definition: ExperimentDefinition) -> ExperimentDefinition:
         """Register a new experiment definition."""
         record = ExperimentDefinitionRecord(
             experiment_id=definition.experiment_id,
@@ -61,9 +59,7 @@ class ExperimentRegistry:
         await self.repository.add(record)
         return run
 
-    async def complete_run(
-        self, run_id: uuid.UUID, metadata: dict[str, Any] | None = None
-    ) -> None:
+    async def complete_run(self, run_id: uuid.UUID, metadata: dict[str, Any] | None = None) -> None:
         """Mark an experiment run as completed."""
         record = await self.repository.get_by_id(run_id)
         if record:
@@ -76,9 +72,7 @@ class ExperimentRegistry:
                 record.metadata_json = new_metadata
             await self.repository.session.flush()
 
-    async def get_experiment_history(
-        self, experiment_id: uuid.UUID
-    ) -> list[ExperimentRun]:
+    async def get_experiment_history(self, experiment_id: uuid.UUID) -> list[ExperimentRun]:
         """Retrieve historical runs for a specific experiment."""
         records = await self.repository.get_runs_by_experiment(experiment_id)
         return [

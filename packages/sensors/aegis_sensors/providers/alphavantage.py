@@ -77,9 +77,8 @@ class AlphaVantageNewsProvider(NewsDataProvider):
                 published_at = now
                 if time_pub and len(time_pub) >= 15:
                     try:
-                        published_at = (
-                            datetime.strptime(time_pub[:15], "%Y%m%dT%H%M%S")
-                            .replace(tzinfo=UTC)
+                        published_at = datetime.strptime(time_pub[:15], "%Y%m%dT%H%M%S").replace(
+                            tzinfo=UTC
                         )
                     except Exception:
                         published_at = now

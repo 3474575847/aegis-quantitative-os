@@ -28,12 +28,11 @@ from sqlalchemy.pool import NullPool
 # DB infrastructure
 # ---------------------------------------------------------------------------
 
+
 def _make_manager(url: str) -> DatabaseManager:
     """Build a NullPool DatabaseManager from a URL without touching the event loop."""
     manager = DatabaseManager.__new__(DatabaseManager)
-    manager.engine = sqlalchemy.ext.asyncio.create_async_engine(
-        url, echo=False, poolclass=NullPool
-    )
+    manager.engine = sqlalchemy.ext.asyncio.create_async_engine(url, echo=False, poolclass=NullPool)
     manager.session_factory = sqlalchemy.ext.asyncio.async_sessionmaker(
         manager.engine,
         class_=sqlalchemy.ext.asyncio.AsyncSession,
@@ -67,10 +66,12 @@ async def sqlite_db_manager() -> AsyncGenerator[DatabaseManager, None]:
 # App patching
 # ---------------------------------------------------------------------------
 
+
 @pytest_asyncio.fixture(scope="module", autouse=True)
 async def patch_db_manager(sqlite_db_manager: DatabaseManager) -> AsyncGenerator[None, None]:
     """Replace db_manager in aegis_api.main for the duration of this module."""
     import aegis_api.main as main_module
+
     original = main_module.db_manager
     main_module.db_manager = sqlite_db_manager
     yield
@@ -81,11 +82,11 @@ async def patch_db_manager(sqlite_db_manager: DatabaseManager) -> AsyncGenerator
 # HTTP client
 # ---------------------------------------------------------------------------
 
+
 @pytest_asyncio.fixture
 async def async_client() -> AsyncGenerator[AsyncClient, None]:
     """Async httpx client wired to the FastAPI app via ASGI."""
     from aegis_api.main import app
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         yield client

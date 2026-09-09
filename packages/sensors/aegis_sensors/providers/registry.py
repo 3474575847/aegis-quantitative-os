@@ -25,10 +25,14 @@ class ProviderRegistry:
         self._initialize_default_providers()
 
     def _initialize_default_providers(self) -> None:
-        configured = os.getenv(
-            "NEWS_PROVIDERS",
-            "marketaux,alpha_vantage,finnhub,gdelt",
-        ).lower().split(",")
+        configured = (
+            os.getenv(
+                "NEWS_PROVIDERS",
+                "marketaux,alpha_vantage,finnhub,gdelt",
+            )
+            .lower()
+            .split(",")
+        )
         configured = [p.strip() for p in configured if p.strip()]
 
         # Register Stage 1 providers

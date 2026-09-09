@@ -58,4 +58,3 @@ class ExperimentRunRecord(Base):
         Index("idx_experiment_runs_experiment", "experiment_id"),
         Index("idx_experiment_runs_status", "status"),
     )
-

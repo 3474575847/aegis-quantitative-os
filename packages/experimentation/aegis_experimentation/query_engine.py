@@ -55,11 +55,7 @@ class QueryEngine:
 
         # In-memory filtering for SQLite fallback in tests
         if is_sqlite and query.filter.tags:
-            items = [
-                item
-                for item in items
-                if all(tag in item.tags for tag in query.filter.tags)
-            ]
+            items = [item for item in items if all(tag in item.tags for tag in query.filter.tags)]
             total_count = len(items)
 
         if query.ranking in [

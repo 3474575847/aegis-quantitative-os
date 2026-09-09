@@ -40,10 +40,7 @@ def upgrade() -> None:
         )
         for table_name, time_column in hypertables:
             bind.execute(
-                text(
-                    "SELECT create_hypertable(:table_name, :time_column, "
-                    "if_not_exists => TRUE)"
-                ),
+                text("SELECT create_hypertable(:table_name, :time_column, if_not_exists => TRUE)"),
                 {"table_name": table_name, "time_column": time_column},
             )
 

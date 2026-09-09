@@ -78,6 +78,7 @@ FRED_SERIES: dict[str, dict[str, str]] = {
 # Data model
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class MacroObservation:
     """

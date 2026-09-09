@@ -51,9 +51,7 @@ class ExperimentRepository(BaseRepository[Any]):
 
         # Count query
         count_query = select(func.count()).select_from(
-            select(ExperimentDefinitionRecord.experiment_id)
-            .where(*filters)
-            .alias("subquery")
+            select(ExperimentDefinitionRecord.experiment_id).where(*filters).alias("subquery")
         )
         count_result = await self.session.execute(count_query)
         total_count = count_result.scalar_one()
@@ -65,9 +63,9 @@ class ExperimentRepository(BaseRepository[Any]):
         query = select(
             ExperimentRunRecord.experiment_id,
             func.count(ExperimentRunRecord.run_id).label("run_count"),
-            func.avg(
-                case((ExperimentRunRecord.status == "COMPLETED", 1.0), else_=0.0)
-            ).label("success_rate"),
+            func.avg(case((ExperimentRunRecord.status == "COMPLETED", 1.0), else_=0.0)).label(
+                "success_rate"
+            ),
         ).group_by(ExperimentRunRecord.experiment_id)
 
         result = await self.session.execute(query)

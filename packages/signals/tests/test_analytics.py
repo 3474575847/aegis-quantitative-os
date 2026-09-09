@@ -33,8 +33,12 @@ def test_reddit_sentiment_uses_zscore_behavior() -> None:
 
 def test_sentiment_zscore_changes_with_historical_distribution() -> None:
     processor = RedditSentimentProcessor()
-    narrow = processor.compute(pd.DataFrame({"score": [1.0, 2.0, 3.0, 4.0]}), {"window": 3, "min_history": 2})
-    wide = processor.compute(pd.DataFrame({"score": [1.0, 10.0, 20.0, 4.0]}), {"window": 3, "min_history": 2})
+    narrow = processor.compute(
+        pd.DataFrame({"score": [1.0, 2.0, 3.0, 4.0]}), {"window": 3, "min_history": 2}
+    )
+    wide = processor.compute(
+        pd.DataFrame({"score": [1.0, 10.0, 20.0, 4.0]}), {"window": 3, "min_history": 2}
+    )
     assert float(narrow.iloc[-1]) != float(wide.iloc[-1])
 
 

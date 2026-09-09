@@ -23,6 +23,7 @@ from fastapi.testclient import TestClient
 # Mock response builders
 # ---------------------------------------------------------------------------
 
+
 def _mock_response(status_code: int, json_data: Any = None) -> MagicMock:
     m = MagicMock()
     m.status_code = status_code
@@ -53,19 +54,23 @@ def _yahoo_ok() -> dict[str, Any]:
     now = int(time.time())
     return {
         "chart": {
-            "result": [{
-                "timestamp": [now - 300, now],
-                "indicators": {
-                    "quote": [{
-                        "open":   [148.0, 149.0],
-                        "high":   [150.0, 151.0],
-                        "low":    [147.0, 148.0],
-                        "close":  [149.5, 150.5],
-                        "volume": [800_000, 900_000],
-                    }]
-                },
-                "meta": {"regularMarketPrice": 150.5, "exchangeName": "NASDAQ"},
-            }],
+            "result": [
+                {
+                    "timestamp": [now - 300, now],
+                    "indicators": {
+                        "quote": [
+                            {
+                                "open": [148.0, 149.0],
+                                "high": [150.0, 151.0],
+                                "low": [147.0, 148.0],
+                                "close": [149.5, 150.5],
+                                "volume": [800_000, 900_000],
+                            }
+                        ]
+                    },
+                    "meta": {"regularMarketPrice": 150.5, "exchangeName": "NASDAQ"},
+                }
+            ],
             "error": None,
         }
     }
@@ -80,7 +85,7 @@ def _coinbase_ok() -> list[Any]:
     # [timestamp, low, high, open, close, volume]
     return [
         [now - 300, 59000.0, 61000.0, 59500.0, 60500.0, 10.5],
-        [now,       60000.0, 62000.0, 60500.0, 61500.0, 12.3],
+        [now, 60000.0, 62000.0, 60500.0, 61500.0, 12.3],
     ]
 
 
@@ -88,11 +93,13 @@ def _coinbase_ok() -> list[Any]:
 # Helper: single httpx mock that returns different values per URL
 # ---------------------------------------------------------------------------
 
+
 def _make_get_mock(**url_responses: Any) -> AsyncMock:
     """
     Return an AsyncMock for httpx.AsyncClient.get that dispatches based on
     whether any key string appears in the URL.
     """
+
     async def _get(url: str, **_kwargs: Any) -> Any:
         for key, response in url_responses.items():
             if key in url:
@@ -105,6 +112,7 @@ def _make_get_mock(**url_responses: Any) -> AsyncMock:
 # ---------------------------------------------------------------------------
 # Equity: Finnhub → Yahoo fallback path
 # ---------------------------------------------------------------------------
+
 
 class TestEquityCandleFallback:
     def test_finnhub_403_falls_back_to_yahoo(self) -> None:
@@ -233,18 +241,22 @@ class TestEquityCandleFallback:
         """Yahoo returns None for extended-hours gaps — those candles must be dropped."""
         yahoo_with_gap = {
             "chart": {
-                "result": [{
-                    "timestamp": [1000, 2000, 3000],
-                    "indicators": {
-                        "quote": [{
-                            "open":   [100.0, None, 102.0],   # gap at index 1
-                            "high":   [101.0, None, 103.0],
-                            "low":    [99.0,  None, 101.0],
-                            "close":  [100.5, None, 102.5],
-                            "volume": [500_000, None, 600_000],
-                        }]
-                    },
-                }],
+                "result": [
+                    {
+                        "timestamp": [1000, 2000, 3000],
+                        "indicators": {
+                            "quote": [
+                                {
+                                    "open": [100.0, None, 102.0],  # gap at index 1
+                                    "high": [101.0, None, 103.0],
+                                    "low": [99.0, None, 101.0],
+                                    "close": [100.5, None, 102.5],
+                                    "volume": [500_000, None, 600_000],
+                                }
+                            ]
+                        },
+                    }
+                ],
             }
         }
         get_mock = _make_get_mock(
@@ -262,6 +274,7 @@ class TestEquityCandleFallback:
 # ---------------------------------------------------------------------------
 # Crypto path: Coinbase — must be unaffected by equity changes
 # ---------------------------------------------------------------------------
+
 
 class TestCryptoCandleUnaffected:
     def test_btc_still_uses_coinbase(self) -> None:
