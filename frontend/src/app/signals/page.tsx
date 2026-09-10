@@ -56,7 +56,7 @@ export default function SignalsPage() {
     try {
       setLoading(true);
       setApiError(null);
-      const res = await fetch(apiUrl("/api/signals"));
+      const res = await fetchWithRetry(apiUrl("/api/signals"));
       if (res.ok) {
         const data = await res.json();
         setSignals(data);
@@ -68,7 +68,6 @@ export default function SignalsPage() {
       }
     } catch (e) {
       setApiError("Cannot reach API — check that the backend is running on port 8000.");
-      console.error("Error fetching signals", e);
     } finally {
       setLoading(false);
     }
@@ -77,13 +76,13 @@ export default function SignalsPage() {
   const selectSignal = async (sig: SignalItem) => {
     setSelectedSignal(sig);
     try {
-      const res = await fetch(apiUrl(`/api/signals/${sig.id}/history?limit=60`));
+      const res = await fetchWithRetry(apiUrl(`/api/signals/${sig.id}/history?limit=60`));
       if (res.ok) {
         const histData = await res.json();
         setHistory(histData);
       }
     } catch (e) {
-      console.error("Error fetching signal history", e);
+      // Graceful error fallback for signal history
     }
   };
 
