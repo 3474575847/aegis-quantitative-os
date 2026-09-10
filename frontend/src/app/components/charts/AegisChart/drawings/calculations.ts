@@ -7,10 +7,23 @@ export function calculateMeasurement(start: ChartPoint, end: ChartPoint): Measur
   const returnPct = priceStart !== 0 ? priceChange / priceStart : 0;
 
   const timeDiffSec = Math.abs(end.time - start.time);
-  const calendarDays = Math.round(timeDiffSec / 86400);
+  const calendarDays = Math.floor(timeDiffSec / 86400);
 
-  // Approximate trading days (5/7th of calendar days, min 1 if non-zero time diff)
+  // Approximate trading days (5/7th of calendar days, min 1 if non-zero time diff and >= 1d)
   const tradingDays = calendarDays > 0 ? Math.max(1, Math.round(calendarDays * (5 / 7))) : 0;
+
+  let formattedTimeSpan = '';
+  if (timeDiffSec < 86400) {
+    const hours = Math.floor(timeDiffSec / 3600);
+    const mins = Math.floor((timeDiffSec % 3600) / 60);
+    if (hours > 0) {
+      formattedTimeSpan = `${hours}h ${mins}m`;
+    } else {
+      formattedTimeSpan = `${mins}m`;
+    }
+  } else {
+    formattedTimeSpan = `${calendarDays}d (${tradingDays} session)`;
+  }
 
   // Annualized return (compound)
   let annualizedReturn: number | undefined;
@@ -29,6 +42,7 @@ export function calculateMeasurement(start: ChartPoint, end: ChartPoint): Measur
     returnPct,
     calendarDays,
     tradingDays,
+    formattedTimeSpan,
     annualizedReturn,
   };
 }

@@ -109,6 +109,7 @@ export interface MeasurementResult {
   returnPct: number;
   calendarDays: number;
   tradingDays: number;
+  formattedTimeSpan: string;
   annualizedReturn?: number;
 }
 
