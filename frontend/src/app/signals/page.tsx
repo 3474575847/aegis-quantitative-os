@@ -128,6 +128,7 @@ export default function SignalsPage() {
         }
         setTickerHistory(datapoints);
       }
+      setApiError(null);
     } catch (e) {
       setApiError("Market quote fetch failed — API may be temporarily unavailable.");
       console.error("Error fetching asset quote or history", e);
