@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from datetime import datetime, timezone
 from typing import Any
 
 from aegis_observability.logger import get_logger
@@ -6,6 +7,7 @@ from aegis_observability.logger import get_logger
 from aegis_sensors.providers.models import NewsArticle
 
 logger = get_logger(__name__)
+UTC = timezone.utc
 
 
 class NewsDataProvider(ABC):
@@ -38,14 +40,10 @@ class NewsDataProvider(ABC):
         """Fetch news for a designated macro topic or sector category."""
 
     def record_success(self) -> None:
-        from datetime import UTC, datetime
-
         self._last_successful_fetch = datetime.now(UTC).isoformat()
         self._consecutive_failures = 0
 
     def record_failure(self, error: Exception) -> None:
-        from datetime import UTC, datetime
-
         self._last_failure = f"{datetime.now(UTC).isoformat()}: {error}"
         self._consecutive_failures += 1
         logger.warning(

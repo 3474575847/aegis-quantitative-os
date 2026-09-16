@@ -3,6 +3,7 @@ from typing import Any
 import pandas as pd
 
 from aegis_signals.analytics import point_in_time_zscore, rolling_mean
+from aegis_signals.csvd import CSVDProcessor
 from aegis_signals.engine import BaseSignalProcessor
 
 

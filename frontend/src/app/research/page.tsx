@@ -18,8 +18,6 @@ interface BacktestResult {
   final_equity: number;
   total_return: number;
   annualized_volatility: number;
-  // cagr, sortino, calmar were added in a recent engine update.
-  // Mark optional so old-format responses (pre-rebuild) don't crash.
   cagr?: number;
   sharpe: number;
   sortino?: number;
@@ -27,10 +25,60 @@ interface BacktestResult {
   calmar?: number;
   win_rate?: number;
   turnover: number;
+  position_size?: number;
+  holding_period?: number;
+  entries?: number;
+  exits?: number;
+  trade_count?: number;
   transaction_cost_bps: number;
   slippage_bps: number;
   execution: string;
+  annualization_factor?: number;
+  bar_interval?: string;
+  periods_per_year?: number;
+  annualization_basis?: string;
   equity_curve: EquityPoint[];
+}
+
+interface SignalDistribution {
+  BUY: number;
+  SELL: number;
+  WATCH: number;
+  NO_TRADE: number;
+  UNAVAILABLE: number;
+}
+
+interface StrategyDiagnostics {
+  total_bars: number;
+  eligible_bars: number;
+  exposed_bars: number;
+  long_exposure_pct: number;
+  short_exposure_pct: number;
+  cash_pct: number;
+  model_version: string;
+  factor_contributions: Array<{
+    factor_id: string;
+    name: string;
+    raw_score: number;
+    learned_beta: number;
+    net_contribution: number;
+    direction: string;
+  }>;
+  disagreement_vector?: any;
+  quality_gates?: any;
+}
+
+interface FullBacktestPayload {
+  signal_id?: string;
+  signal_name?: string;
+  strategy_version?: string;
+  signal_source?: string;
+  symbol: string;
+  market_source: string;
+  methodology: string;
+  signal_distribution?: SignalDistribution;
+  diagnostics?: StrategyDiagnostics;
+  result: BacktestResult;
 }
 
 export default function ResearchPage() {
@@ -39,6 +87,7 @@ export default function ResearchPage() {
   const [symbol, setSymbol] = useState('BTC');
   const [costs, setCosts] = useState('5');
   const [slippage, setSlippage] = useState('0');
+  const [payload, setPayload] = useState<FullBacktestPayload | null>(null);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [source, setSource] = useState<string | null>(null);
   const [message, setMessage] = useState('Select a signal and run a point-in-time backtest.');
@@ -72,18 +121,20 @@ export default function ResearchPage() {
     if (!signalId) return;
     setRunning(true);
     setResult(null);
+    setPayload(null);
     setSavedExpId(null);
-    setMessage('Running against stored signal observations and real market candles...');
+    setMessage('Evaluating point-in-time signals dynamically across market candles...');
     try {
       const response = await fetch(
         apiUrl(`/api/backtests/${signalId}?symbol=${encodeURIComponent(symbol)}&transaction_cost_bps=${costs}&slippage_bps=${slippage}`),
         { method: 'POST' },
       );
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.detail || 'Backtest unavailable');
-      setResult(payload.result);
-      setSource(payload.market_source);
-      setMessage(payload.methodology);
+      const payloadRes = await response.json();
+      if (!response.ok) throw new Error(payloadRes.detail || 'Backtest unavailable');
+      setPayload(payloadRes);
+      setResult(payloadRes.result);
+      setSource(payloadRes.market_source);
+      setMessage(payloadRes.methodology);
       if (selectedSignal) {
         setExpName(`${selectedSignal.name} (${symbol}) - ${new Date().toISOString().slice(0, 10)}`);
         setExpDescription(
@@ -367,7 +418,11 @@ export default function ResearchPage() {
                 <strong className="card-value" style={{ fontSize: '20px' }}>
                   {formatPercent(result.annualized_volatility)}
                 </strong>
-                <span className="card-subtitle">252-period root-T</span>
+                <span className="card-subtitle">
+                  {result.annualization_factor
+                    ? `${result.annualization_factor.toLocaleString()} periods/yr`
+                    : 'Annualized'}
+                </span>
               </div>
 
               <div className="card">
@@ -385,6 +440,158 @@ export default function ResearchPage() {
               </div>
             </div>
           </div>
+
+          {/* Strategy Signal Distribution & Diagnostics */}
+          {payload?.signal_distribution && (
+            <section className="card">
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '12px',
+                }}
+              >
+                <span className="card-title">Signal State Distribution & Exposure Diagnostics</span>
+                <span className="badge badge-green font-mono">
+                  {payload.signal_source || 'Dynamic Evaluation'}
+                </span>
+              </div>
+              <div
+                className="grid-4"
+                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}
+              >
+                <div style={{ padding: '8px 12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '6px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>BUY Signals</div>
+                  <strong style={{ fontSize: '16px', color: 'var(--accent-green)' }}>
+                    {payload.signal_distribution.BUY} ({formatPercent(payload.signal_distribution.BUY / (payload.diagnostics?.total_bars || result.observations))})
+                  </strong>
+                </div>
+                <div style={{ padding: '8px 12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '6px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>SELL Signals</div>
+                  <strong style={{ fontSize: '16px', color: 'var(--accent-red)' }}>
+                    {payload.signal_distribution.SELL} ({formatPercent(payload.signal_distribution.SELL / (payload.diagnostics?.total_bars || result.observations))})
+                  </strong>
+                </div>
+                <div style={{ padding: '8px 12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '6px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>WATCH Signals</div>
+                  <strong style={{ fontSize: '16px', color: 'var(--accent-cyan)' }}>
+                    {payload.signal_distribution.WATCH} ({formatPercent(payload.signal_distribution.WATCH / (payload.diagnostics?.total_bars || result.observations))})
+                  </strong>
+                </div>
+                <div style={{ padding: '8px 12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '6px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>NO TRADE Signals</div>
+                  <strong style={{ fontSize: '16px', color: 'var(--text-muted)' }}>
+                    {payload.signal_distribution.NO_TRADE} ({formatPercent(payload.signal_distribution.NO_TRADE / (payload.diagnostics?.total_bars || result.observations))})
+                  </strong>
+                </div>
+              </div>
+
+              {payload.diagnostics && (
+                <div
+                  className="font-mono"
+                  style={{
+                    marginTop: '12px',
+                    padding: '10px',
+                    backgroundColor: 'var(--bg-secondary)',
+                    borderRadius: '6px',
+                    fontSize: '11px',
+                    color: 'var(--text-muted)',
+                    display: 'flex',
+                    gap: '18px',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <span>
+                    Long Exposure:{' '}
+                    <strong style={{ color: 'var(--accent-green)' }}>
+                      {formatPercent(payload.diagnostics.long_exposure_pct)}
+                    </strong>
+                  </span>
+                  <span>
+                    Short Exposure:{' '}
+                    <strong style={{ color: 'var(--accent-red)' }}>
+                      {formatPercent(payload.diagnostics.short_exposure_pct)}
+                    </strong>
+                  </span>
+                  <span>
+                    Cash / Neutral:{' '}
+                    <strong style={{ color: 'var(--text-primary)' }}>
+                      {formatPercent(payload.diagnostics.cash_pct)}
+                    </strong>
+                  </span>
+                  <span>
+                    Entries:{' '}
+                    <strong style={{ color: 'var(--text-primary)' }}>{result.entries ?? 0}</strong>
+                  </span>
+                  <span>
+                    Exits:{' '}
+                    <strong style={{ color: 'var(--text-primary)' }}>{result.exits ?? 0}</strong>
+                  </span>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Factor Contribution Traceability */}
+          {payload?.diagnostics?.factor_contributions && payload.diagnostics.factor_contributions.length > 0 && (
+            <section className="card">
+              <span className="card-title" style={{ marginBottom: '12px', display: 'block' }}>
+                A³ Learned Factor Contribution Traceability (Latest Point-in-Time Bar)
+              </span>
+              <div className="grid-4" style={{ gap: '10px' }}>
+                {payload.diagnostics.factor_contributions.map((fc) => (
+                  <div
+                    key={fc.factor_id}
+                    style={{
+                      padding: '10px',
+                      backgroundColor: 'var(--bg-secondary)',
+                      borderRadius: '6px',
+                      borderLeft: `3px solid ${
+                        fc.net_contribution > 0
+                          ? 'var(--accent-green)'
+                          : fc.net_contribution < 0
+                          ? 'var(--accent-red)'
+                          : 'var(--text-muted)'
+                      }`,
+                    }}
+                  >
+                    <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-primary)' }}>
+                      {fc.name}
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        marginTop: '4px',
+                        fontSize: '11px',
+                        color: 'var(--text-muted)',
+                      }}
+                    >
+                      <span>Raw z: {fc.raw_score.toFixed(2)}σ</span>
+                      <span>Weight: {fc.learned_beta}</span>
+                    </div>
+                    <div
+                      style={{
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        marginTop: '4px',
+                        color:
+                          fc.net_contribution > 0
+                            ? 'var(--accent-green)'
+                            : fc.net_contribution < 0
+                            ? 'var(--accent-red)'
+                            : 'var(--text-primary)',
+                      }}
+                    >
+                      Net Impact: {fc.net_contribution > 0 ? '+' : ''}
+                      {fc.net_contribution.toFixed(4)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* Execution & Methodology Details */}
           <section className="card">
@@ -419,6 +626,12 @@ export default function ResearchPage() {
               <span>
                 Observations:{' '}
                 <strong style={{ color: 'var(--text-primary)' }}>{result.observations} bars</strong>
+              </span>
+              <span>
+                Annualization:{' '}
+                <strong style={{ color: 'var(--accent-cyan)' }}>
+                  {result.annualization_basis || `${result.annualization_factor || 19656} periods/yr`}
+                </strong>
               </span>
               <span>
                 Turnover:{' '}

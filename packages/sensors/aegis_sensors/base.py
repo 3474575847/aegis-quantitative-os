@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 from aegis_events.models import LegacyEvent as Event
 from pydantic import BaseModel
@@ -17,7 +17,10 @@ class SensorConfig(BaseModel):
     mock_path: str | None = None
 
 
-class BaseSensor[T: BaseModel](ABC):
+T = TypeVar("T", bound=BaseModel)
+
+
+class BaseSensor(Generic[T], ABC):
     def __init__(self, config: SensorConfig) -> None:
         self.config = config
 

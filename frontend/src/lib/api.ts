@@ -1,32 +1,52 @@
 /**
  * Central API URL resolver.
  *
- * At build / dev time Next.js inlines NEXT_PUBLIC_API_URL from the environment.
- * When the variable is not set the application falls back to localhost:8000 so
- * that local development still works without any .env file.
+ * In the browser and production environments, API endpoints are served
+ * co-located with the Next.js full-stack server on port 3000.
+ * Relative paths (e.g. "/api/...") allow the browser to automatically query
+ * the current origin without CORS or unreachable localhost port failures.
  *
  * Usage:
  *   import { apiUrl } from "@/lib/api";
  *   const res = await fetch(apiUrl("/api/signals"));
  */
 
-const BASE = (
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
-).replace(/\/$/, ""); // strip trailing slash if present
+function resolveBaseUrl(): string {
+  // On server-side SSR, if an internal API URL is provided, use it
+  const envUrl = (process.env.NEXT_PUBLIC_API_URL || "").trim().replace(/\/$/, "");
+  // Ignore localhost:8000 or internal daemon ports as all APIs are served by Next.js on port 3000
+  if (!envUrl || envUrl.includes(":8000") || envUrl.includes("localhost:8000") || envUrl.includes("127.0.0.1:8000")) {
+    return "";
+  }
+  return envUrl;
+}
+
+const BASE = resolveBaseUrl();
 
 /**
- * Build an absolute API URL.
+ * Build an absolute or relative API URL.
  * @param path  Must start with "/", e.g. "/api/signals"
  */
 export function apiUrl(path: string): string {
   if (!path.startsWith("/")) {
     throw new Error(`apiUrl: path must start with "/" — got "${path}"`);
   }
-  return `${BASE}${path}`;
+
+  // In the browser, ALWAYS use relative path so requests always hit the Next.js API routes on the current origin
+  if (typeof window !== "undefined") {
+    return path;
+  }
+
+  // On the server side (SSR / Node.js)
+  if (BASE) {
+    return `${BASE}${path}`;
+  }
+
+  return path;
 }
 
-/** The raw base URL without a trailing path, e.g. "http://localhost:8000" */
-export const API_BASE = BASE;
+/** The raw base URL without a trailing path */
+export const API_BASE = BASE || "localhost:3000";
 
 const NUMBER_FORMATTER = new Intl.NumberFormat(undefined, {
   maximumSignificantDigits: 2,

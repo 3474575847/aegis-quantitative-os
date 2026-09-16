@@ -1,12 +1,14 @@
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 from aegis_storage.models.base import Base
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+T = TypeVar("T", bound=Base)
 
-class BaseRepository[T: Base]:
+
+class BaseRepository(Generic[T]):
     def __init__(self, model: type[T], session: AsyncSession):
         self.model = model
         self.session = session

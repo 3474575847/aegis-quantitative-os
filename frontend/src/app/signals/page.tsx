@@ -42,6 +42,7 @@ export default function SignalsPage() {
   const symbolRef = useRef("BTC");
   const [activeQuote, setActiveQuote] = useState<TickerQuote | null>(null);
   const [tickerHistory, setTickerHistory] = useState<ChartDatapoint[]>([]);
+  const [a3Evaluation, setA3Evaluation] = useState<any | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
@@ -50,13 +51,14 @@ export default function SignalsPage() {
     selectTicker("BTC");
     const refreshTimer = window.setInterval(() => selectTicker(symbolRef.current), 15_000);
     return () => window.clearInterval(refreshTimer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchSignals = async () => {
     try {
       setLoading(true);
       setApiError(null);
-      const res = await fetch(apiUrl("/api/signals"));
+      const res = await fetchWithRetry(apiUrl("/api/signals"));
       if (res.ok) {
         const data = await res.json();
         setSignals(data);
@@ -67,7 +69,7 @@ export default function SignalsPage() {
         setApiError(`Signal catalog returned ${res.status}`);
       }
     } catch (e) {
-      setApiError("Cannot reach API — check that the backend is running on port 8000.");
+      setApiError("Cannot reach signals API service.");
       console.error("Error fetching signals", e);
     } finally {
       setLoading(false);
@@ -77,7 +79,7 @@ export default function SignalsPage() {
   const selectSignal = async (sig: SignalItem) => {
     setSelectedSignal(sig);
     try {
-      const res = await fetch(apiUrl(`/api/signals/${sig.id}/history?limit=60`));
+      const res = await fetchWithRetry(apiUrl(`/api/signals/${sig.id}/history?limit=60`));
       if (res.ok) {
         const histData = await res.json();
         setHistory(histData);
@@ -127,6 +129,13 @@ export default function SignalsPage() {
           }
         }
         setTickerHistory(datapoints);
+      }
+
+      // 3. Fetch A3 Adaptive Alpha evaluation
+      const resA3 = await fetchWithRetry(apiUrl(`/api/signals/a3/${cleanSym}`));
+      if (resA3.ok) {
+        const evalData = await resA3.json();
+        setA3Evaluation(evalData);
       }
     } catch (e) {
       setApiError("Market quote fetch failed — API may be temporarily unavailable.");
@@ -320,6 +329,149 @@ export default function SignalsPage() {
             </div>
           </div>
         ) : null}
+
+        {/* AEGIS ADAPTIVE ALPHA ENGINE (A³) LIVE INTELLIGENCE BANNER */}
+        {a3Evaluation && (
+          <div
+            style={{
+              marginTop: "16px",
+              padding: "18px",
+              backgroundColor: "rgba(10, 16, 26, 0.9)",
+              border: "1px solid var(--accent-cyan)",
+              borderRadius: "8px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "14px",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span className="badge badge-cyan font-mono" style={{ fontSize: "12px", padding: "4px 10px" }}>
+                  A³ ADAPTIVE ALPHA ENGINE
+                </span>
+                <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Model: {a3Evaluation.model_version}</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Signal Horizon: {a3Evaluation.signal_horizon}</span>
+                <span
+                  className="font-mono"
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: "6px",
+                    fontWeight: "800",
+                    fontSize: "14px",
+                    backgroundColor:
+                      a3Evaluation.signal_action === "BUY"
+                        ? "rgba(16, 185, 129, 0.2)"
+                        : a3Evaluation.signal_action === "SELL"
+                        ? "rgba(239, 68, 68, 0.2)"
+                        : "rgba(245, 158, 11, 0.2)",
+                    color:
+                      a3Evaluation.signal_action === "BUY"
+                        ? "var(--accent-green)"
+                        : a3Evaluation.signal_action === "SELL"
+                        ? "var(--accent-red)"
+                        : "var(--accent-amber)",
+                    border: `1px solid ${
+                      a3Evaluation.signal_action === "BUY"
+                        ? "var(--accent-green)"
+                        : a3Evaluation.signal_action === "SELL"
+                        ? "var(--accent-red)"
+                        : "var(--accent-amber)"
+                    }`,
+                  }}
+                >
+                  STATE: {a3Evaluation.signal_action}
+                </span>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", backgroundColor: "var(--bg-secondary)", padding: "12px", borderRadius: "6px" }}>
+              <div>
+                <span style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Calibrated Score</span>
+                <div style={{ fontSize: "20px", fontWeight: "800", color: a3Evaluation.calibrated_aegis_score >= 0 ? "var(--accent-green)" : "var(--accent-red)" }}>
+                  {formatSignedFigure(a3Evaluation.calibrated_aegis_score)} σ
+                </div>
+              </div>
+              <div>
+                <span style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Expected Excess Return</span>
+                <div style={{ fontSize: "20px", fontWeight: "800", color: a3Evaluation.expected_excess_return_pct >= 0 ? "var(--accent-green)" : "var(--accent-red)" }}>
+                  {formatSignedFigure(a3Evaluation.expected_excess_return_pct)}%
+                </div>
+              </div>
+              <div>
+                <span style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Uncertainty (±σ)</span>
+                <div style={{ fontSize: "20px", fontWeight: "800", color: "var(--accent-amber)" }}>
+                  ±{a3Evaluation.uncertainty_pct}%
+                </div>
+              </div>
+              <div>
+                <span style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>95% Confidence Interval</span>
+                <div style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-primary)", marginTop: "4px" }}>
+                  [{a3Evaluation.confidence_interval[0]}%, {a3Evaluation.confidence_interval[1]}%]
+                </div>
+              </div>
+            </div>
+
+            {/* WHY THIS SIGNAL PANEL & HOW AEGIS LEARNED */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginTop: "8px" }}>
+              {/* Why This Signal */}
+              <div style={{ padding: "14px", backgroundColor: "var(--bg-card)", borderRadius: "6px", border: "1px solid var(--border-color)" }}>
+                <span style={{ fontSize: "12px", fontWeight: "800", color: "var(--accent-cyan)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  🔍 WHY THIS SIGNAL?
+                </span>
+                <div style={{ marginTop: "8px", fontSize: "12px" }}>
+                  <span style={{ color: "var(--text-muted)" }}>Primary Driver: </span>
+                  <strong style={{ color: "var(--text-primary)" }}>{a3Evaluation.primary_driver}</strong>
+                </div>
+
+                <div style={{ marginTop: "8px" }}>
+                  <span style={{ fontSize: "11px", color: "var(--accent-green)", fontWeight: "700" }}>SUPPORTING EVIDENCE</span>
+                  <ul style={{ margin: "4px 0 0 16px", padding: 0, fontSize: "11px", color: "var(--text-primary)" }}>
+                    {a3Evaluation.supporting_evidence.map((ev: string, idx: number) => (
+                      <li key={idx}>{ev}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div style={{ marginTop: "8px" }}>
+                  <span style={{ fontSize: "11px", color: "var(--accent-red)", fontWeight: "700" }}>CONTRADICTING EVIDENCE</span>
+                  <ul style={{ margin: "4px 0 0 16px", padding: 0, fontSize: "11px", color: "var(--text-muted)" }}>
+                    {a3Evaluation.contradicting_evidence.map((ev: string, idx: number) => (
+                      <li key={idx}>{ev}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              {/* How Aegis Learned */}
+              <div style={{ padding: "14px", backgroundColor: "var(--bg-card)", borderRadius: "6px", border: "1px solid var(--border-color)" }}>
+                <span style={{ fontSize: "12px", fontWeight: "800", color: "var(--accent-purple)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  🧠 HOW AEGIS LEARNED (CALIBRATION)
+                </span>
+                <p style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>
+                  Ridge-GAM empirical weights calibrated over walk-forward point-in-time outcomes without lookahead bias.
+                </p>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "10px" }}>
+                  {a3Evaluation.factor_contributions.slice(0, 4).map((fc: any, idx: number) => (
+                    <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
+                      <span style={{ color: "var(--text-primary)" }}>{fc.factor_id} ({fc.direction})</span>
+                      <span className="font-mono" style={{ color: fc.net_contribution >= 0 ? "var(--accent-green)" : "var(--accent-red)", fontWeight: "700" }}>
+                        β={fc.learned_beta} | net: {formatSignedFigure(fc.net_contribution)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ marginTop: "10px", fontSize: "11px", color: "var(--accent-cyan)", display: "flex", justifyContent: "space-between" }}>
+                  <span>Quality Gates: {a3Evaluation.quality_gates.gate_summary}</span>
+                  <span>OOS Health: {a3Evaluation.oos_model_health}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Reactive Dual-Axis Price & Sentiment Overlay Chart */}

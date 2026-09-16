@@ -22,7 +22,8 @@ from __future__ import annotations
 import contextlib
 import os
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import date, datetime, timezone
+UTC = timezone.utc
 from typing import Any
 
 import httpx

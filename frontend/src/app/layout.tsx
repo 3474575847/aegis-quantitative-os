@@ -4,13 +4,27 @@ import React from 'react';
 import HeaderStatus from './components/HeaderStatus';
 
 export const metadata = {
-  title: 'Aegis-Alpha // Quantitative Research & Signal Engine',
+  title: 'Aegis Quantitative OS',
   description: 'Institutional quantitative research and market intelligence platform',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.addEventListener('error', function(event) {
+                if (event.message && (event.message.indexOf('ChunkLoadError') !== -1 || event.message.indexOf('Loading chunk') !== -1)) {
+                  console.warn('Chunk load error detected, reloading fresh version...', event.message);
+                  window.location.reload();
+                }
+              });
+            `,
+          }}
+        />
+      </head>
       <body>
         <div className="app-container">
           <aside className="sidebar">
@@ -20,6 +34,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </div>
 
             <nav className="sidebar-nav">
+              <Link href="/" className="nav-item">
+                <span>⚡</span>
+                <span>Command Center</span>
+              </Link>
               <Link href="/signals" className="nav-item">
                 <span>📡</span>
                 <span>Signal Engine</span>

@@ -1,23 +1,24 @@
 {
   "name": "aegis-alpha",
   "private": true,
+  "workspaces": [
+    "frontend"
+  ],
   "engines": {
     "node": ">=20.0.0"
   },
   "scripts": {
-    "dev": "pnpm --filter aegis-frontend dev",
-    "lint": "eslint .",
+    "dev": "npm run dev --workspace=frontend",
+    "build": "npm run build --workspace=frontend",
+    "start": "npm run start --workspace=frontend",
+    "lint": "npm run lint --workspace=frontend",
+    "test": "vitest run",
     "format": "prettier --write ."
   },
   "devDependencies": {
     "eslint": "^9.0.0",
     "prettier": "^3.0.0",
-    "typescript": "^5.0.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "sharp",
-      "unrs-resolver"
-    ]
+    "typescript": "^5.0.0",
+    "vitest": "^5.0.0"
   }
 }

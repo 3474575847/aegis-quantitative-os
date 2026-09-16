@@ -5,8 +5,12 @@ import { apiUrl, API_BASE } from '@/lib/api';
 
 export default function HeaderStatus() {
   const [ingestionMode, setIngestionMode] = useState<string>('LIVE_STREAM');
+  const [gatewayHost, setGatewayHost] = useState<string>(API_BASE.replace("http://", "").replace("https://", ""));
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.host) {
+      setGatewayHost(window.location.host);
+    }
     fetchStatus();
     const interval = setInterval(fetchStatus, 5000);
     return () => clearInterval(interval);
@@ -42,7 +46,7 @@ export default function HeaderStatus() {
       </span>
       {process.env.NODE_ENV !== 'production' && (
         <span style={{ borderLeft: '1px solid var(--border-color)', paddingLeft: '16px' }}>
-          GATEWAY: <strong className="font-mono">{API_BASE.replace("http://", "").replace("https://", "")}</strong>
+          GATEWAY: <strong className="font-mono">{gatewayHost}</strong>
         </span>
       )}
     </div>

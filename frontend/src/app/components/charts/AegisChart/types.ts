@@ -67,6 +67,7 @@ export type ChartType = 'candles' | 'ohlc' | 'line' | 'area';
 
 export type DrawingType =
   | 'cursor'
+  | 'select'
   | 'ruler'
   | 'trendline'
   | 'horizontalLine'
@@ -114,6 +115,7 @@ export interface MeasurementResult {
 }
 
 export type IndicatorId =
+  | 'csvd'
   | 'sma'
   | 'ema'
   | 'vwap'

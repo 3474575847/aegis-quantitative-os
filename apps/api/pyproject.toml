@@ -2,7 +2,7 @@
 name = "aegis-api"
 version = "0.1.0"
 description = "Aegis-Alpha api application"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
     "aegis-core",
     "aegis-events",

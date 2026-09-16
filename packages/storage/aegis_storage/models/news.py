@@ -1,5 +1,6 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+UTC = timezone.utc
 from typing import Any
 
 from aegis_storage.models.base import Base, SQLiteCompatibleARRAY, SQLiteCompatibleJSONB

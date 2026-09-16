@@ -2,7 +2,7 @@
 name = "aegis-events"
 version = "0.1.0"
 description = "Aegis-Alpha events package"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
     "pydantic>=2.13.4",
 ]

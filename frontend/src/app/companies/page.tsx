@@ -61,7 +61,7 @@ export default function CompaniesIndexPage() {
       }
       navigate(sym);
     } catch {
-      setCheckError('Cannot reach API — check that the backend is running on port 8000.');
+      setCheckError('Cannot reach market data service. Please try again.');
     } finally {
       setChecking(false);
     }

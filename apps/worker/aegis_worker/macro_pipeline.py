@@ -13,7 +13,8 @@ This is always >= the FRED realtime_start, so no look-ahead bias is introduced.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+UTC = timezone.utc
 
 from aegis_observability.logger import get_logger
 from aegis_sensors.providers.fred import FREDProvider, MacroObservation

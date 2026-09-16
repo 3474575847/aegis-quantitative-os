@@ -122,24 +122,42 @@ export default function MacroObservatoryPage() {
     setError(null);
     try {
       const [yieldResponse, regimeResponse, ...seriesResponses] = await Promise.all([
-        fetch(apiUrl('/api/macro/yields')),
+        fetch(apiUrl('/api/macro/yields')).catch(() => fetch(apiUrl('/api/macro/yield-curve'))),
         fetch(apiUrl('/api/macro/regime')),
         ...SERIES.map((item) => fetch(apiUrl(`/api/macro/series/${item.id}?limit=60`))),
       ]);
-      if (![yieldResponse, regimeResponse, ...seriesResponses].every((response) => response.ok)) {
+
+      if (yieldResponse.ok) {
+        const yieldData = (await yieldResponse.json()) as YieldSnapshot;
+        setYields(yieldData);
+      }
+
+      if (regimeResponse.ok) {
+        const regimeData = (await regimeResponse.json()) as Regime;
+        setRegime(regimeData);
+      }
+
+      const seriesMap: Record<string, MacroSeries> = {};
+      for (let i = 0; i < seriesResponses.length; i++) {
+        const resp = seriesResponses[i];
+        const item = SERIES[i];
+        if (resp && resp.ok) {
+          try {
+            const data = (await resp.json()) as MacroSeries;
+            seriesMap[data.series_id || item.id] = data;
+          } catch (e) {
+            console.warn(`Failed to parse macro series ${item.id}`, e);
+          }
+        }
+      }
+      setSeries(seriesMap);
+
+      if (!yieldResponse.ok && !regimeResponse.ok) {
         throw new Error('Macro API returned an error');
       }
-      const [yieldData, regimeData, ...seriesData] = await Promise.all([
-        yieldResponse.json() as Promise<YieldSnapshot>,
-        regimeResponse.json() as Promise<Regime>,
-        ...seriesResponses.map((response) => response.json() as Promise<MacroSeries>),
-      ]);
-      setYields(yieldData);
-      setRegime(regimeData);
-      setSeries(Object.fromEntries(seriesData.map((data) => [data.series_id, data])));
     } catch (loadError) {
       console.error('Macro observatory load error', loadError);
-      setError('Cannot reach macro services. Confirm the API and worker are running.');
+      setError('Cannot reach macro services. Confirm the API is running.');
     } finally {
       setLoading(false);
     }

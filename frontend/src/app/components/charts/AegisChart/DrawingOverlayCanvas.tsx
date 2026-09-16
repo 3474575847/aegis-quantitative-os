@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { formatFigure, formatPercent, formatSignedFigure } from '../../../../lib/api';
-import { calculateMeasurement } from './drawings/calculations';
+import { calculateMeasurement, isDrawingHit, isMeasurementHit } from './drawings/calculations';
 import {
   AegisEventOverlay,
   AegisSignalOverlay,
@@ -17,6 +17,8 @@ interface Props {
   width: number;
   height: number;
   activeDrawingTool: DrawingType;
+  drawingColor?: string;
+  drawingLineWidth?: number;
   drawings: Drawing[];
   measurements: MeasurementResult[];
   selectedDrawingId: string | null;
@@ -26,6 +28,7 @@ interface Props {
   showSignals: boolean;
   showEvents: boolean;
   showBacktests: boolean;
+  redrawKey?: number;
   timeToX: (time: number) => number | null;
   priceToY: (price: number) => number | null;
   xToTime: (x: number) => number | null;
@@ -44,6 +47,8 @@ export default function DrawingOverlayCanvas({
   width,
   height,
   activeDrawingTool,
+  drawingColor = '#00e5ff',
+  drawingLineWidth = 2,
   drawings,
   measurements,
   selectedDrawingId,
@@ -53,6 +58,7 @@ export default function DrawingOverlayCanvas({
   showSignals,
   showEvents,
   showBacktests,
+  redrawKey,
   timeToX,
   priceToY,
   xToTime,
@@ -80,6 +86,16 @@ export default function DrawingOverlayCanvas({
     pointIndex: number;
   } | null>(null);
 
+  // Dragging entire existing drawing or measurement (translation)
+  const [activeMove, setActiveMove] = React.useState<{
+    type: 'drawing' | 'measurement';
+    id: string;
+    startPoint: ChartPoint;
+    initialDrawingPoints?: ChartPoint[];
+    initialMeasStart?: ChartPoint;
+    initialMeasEnd?: ChartPoint;
+  } | null>(null);
+
   // Hover card state for signals/events/backtests
   const [hoverCard, setHoverCard] = React.useState<{
     x: number;
@@ -91,7 +107,7 @@ export default function DrawingOverlayCanvas({
   // Hovering interactive element state for dynamic pointerEvents in cursor mode
   const [isHoveringInteractive, setIsHoveringInteractive] = React.useState(false);
 
-  // Keyboard shortcut listener (Escape to return to cursor mode, Delete/Backspace to delete selected)
+  // Keyboard shortcut listener (Escape to cancel/deselect, Delete/Backspace to delete selected)
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -104,6 +120,7 @@ export default function DrawingOverlayCanvas({
         setStartPoint(null);
         setCurrentMousePoint(null);
         setActiveHandle(null);
+        setActiveMove(null);
         onSelectDrawing(null);
         onReturnToCursor();
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -118,7 +135,7 @@ export default function DrawingOverlayCanvas({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedDrawingId, onRemoveDrawing, onRemoveMeasurement, onSelectDrawing, onReturnToCursor]);
 
-  // Redraw canvas on dependencies
+  // Redraw canvas on dependencies (including redrawKey for pan/zoom synchronization)
   React.useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -139,7 +156,16 @@ export default function DrawingOverlayCanvas({
 
     // 3. Render in-progress drawing preview
     if (isMouseCreating && startPoint && currentMousePoint) {
-      renderInProgressPreview(ctx, activeDrawingTool, startPoint, currentMousePoint, timeToX, priceToY);
+      renderInProgressPreview(
+        ctx,
+        activeDrawingTool,
+        startPoint,
+        currentMousePoint,
+        timeToX,
+        priceToY,
+        drawingColor,
+        drawingLineWidth
+      );
     }
 
     // 4. Render intelligence overlays
@@ -156,6 +182,8 @@ export default function DrawingOverlayCanvas({
     width,
     height,
     activeDrawingTool,
+    drawingColor,
+    drawingLineWidth,
     drawings,
     measurements,
     selectedDrawingId,
@@ -168,12 +196,19 @@ export default function DrawingOverlayCanvas({
     showSignals,
     showEvents,
     showBacktests,
+    redrawKey,
     timeToX,
     priceToY,
   ]);
 
-  // Mouse Down: Start creating or dragging handle
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  // Pointer Down: Start creating, dragging handle, or dragging whole drawing
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
+
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -183,18 +218,18 @@ export default function DrawingOverlayCanvas({
     if (time === null || price === null) return;
     const point: ChartPoint = { time, price };
 
-    // Check hit test for existing endpoint handles first (editing)
+    // 1. Check hit test for existing endpoint handles first (editing handles)
     for (const m of measurements) {
       const sx1 = timeToX(m.start.time);
       const sy1 = priceToY(m.start.price);
       const sx2 = timeToX(m.end.time);
       const sy2 = priceToY(m.end.price);
-      if (sx1 !== null && sy1 !== null && Math.hypot(sx1 - x, sy1 - y) < 12) {
+      if (sx1 !== null && sy1 !== null && Math.hypot(sx1 - x, sy1 - y) < 14) {
         setActiveHandle({ type: 'measurement', id: m.id, pointIndex: 0 });
         onSelectDrawing(m.id);
         return;
       }
-      if (sx2 !== null && sy2 !== null && Math.hypot(sx2 - x, sy2 - y) < 12) {
+      if (sx2 !== null && sy2 !== null && Math.hypot(sx2 - x, sy2 - y) < 14) {
         setActiveHandle({ type: 'measurement', id: m.id, pointIndex: 1 });
         onSelectDrawing(m.id);
         return;
@@ -205,7 +240,7 @@ export default function DrawingOverlayCanvas({
       for (let i = 0; i < d.points.length; i++) {
         const px = timeToX(d.points[i].time);
         const py = priceToY(d.points[i].price);
-        if (px !== null && py !== null && Math.hypot(px - x, py - y) < 12) {
+        if (px !== null && py !== null && Math.hypot(px - x, py - y) < 14) {
           setActiveHandle({ type: 'drawing', id: d.id, pointIndex: i });
           onSelectDrawing(d.id);
           return;
@@ -213,7 +248,37 @@ export default function DrawingOverlayCanvas({
       }
     }
 
-    if (activeDrawingTool === 'cursor') {
+    // 2. Check hit test for drawing bodies or measurement bodies (whole translation)
+    if (activeDrawingTool === 'select' || activeDrawingTool === 'cursor' || selectedDrawingId) {
+      for (const m of measurements) {
+        if (isMeasurementHit(m, x, y, timeToX, priceToY)) {
+          onSelectDrawing(m.id);
+          setActiveMove({
+            type: 'measurement',
+            id: m.id,
+            startPoint: point,
+            initialMeasStart: { ...m.start },
+            initialMeasEnd: { ...m.end },
+          });
+          return;
+        }
+      }
+
+      for (const d of drawings) {
+        if (isDrawingHit(d, x, y, timeToX, priceToY, width)) {
+          onSelectDrawing(d.id);
+          setActiveMove({
+            type: 'drawing',
+            id: d.id,
+            startPoint: point,
+            initialDrawingPoints: d.points.map((p) => ({ ...p })),
+          });
+          return;
+        }
+      }
+    }
+
+    if (activeDrawingTool === 'cursor' || activeDrawingTool === 'select') {
       onSelectDrawing(null);
       return;
     }
@@ -226,7 +291,12 @@ export default function DrawingOverlayCanvas({
         type: activeDrawingTool,
         points: [point],
         text: textPrompt ?? undefined,
-        style: { color: '#00e5ff', lineWidth: 1.5, lineStyle: 'solid' },
+        style: {
+          color: drawingColor,
+          lineWidth: drawingLineWidth,
+          lineStyle: 'solid',
+          fillColor: `${drawingColor}22`,
+        },
       };
       onAddDrawing(newDrawing);
       onReturnToCursor();
@@ -239,8 +309,13 @@ export default function DrawingOverlayCanvas({
     setCurrentMousePoint(point);
   };
 
-  // Mouse Move: Update creation preview, handle position, or hit detection
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  // Pointer Move: Update creation preview, handle position, moving drawing, or hit detection
+  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (activeDrawingTool !== 'cursor' || isMouseCreating || activeHandle || activeMove) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -272,32 +347,58 @@ export default function DrawingOverlayCanvas({
         }
         return;
       }
+
+      // Handle translating whole drawing or measurement
+      if (activeMove) {
+        const deltaT = point.time - activeMove.startPoint.time;
+        const deltaP = point.price - activeMove.startPoint.price;
+
+        if (activeMove.type === 'drawing' && activeMove.initialDrawingPoints) {
+          const target = drawings.find((d) => d.id === activeMove.id);
+          if (target) {
+            const newPoints = activeMove.initialDrawingPoints.map((pt) => ({
+              time: pt.time + deltaT,
+              price: pt.price + deltaP,
+            }));
+            onUpdateDrawing({ ...target, points: newPoints });
+          }
+        } else if (
+          activeMove.type === 'measurement' &&
+          activeMove.initialMeasStart &&
+          activeMove.initialMeasEnd
+        ) {
+          const target = measurements.find((m) => m.id === activeMove.id);
+          if (target) {
+            const newStart: ChartPoint = {
+              time: activeMove.initialMeasStart.time + deltaT,
+              price: activeMove.initialMeasStart.price + deltaP,
+            };
+            const newEnd: ChartPoint = {
+              time: activeMove.initialMeasEnd.time + deltaT,
+              price: activeMove.initialMeasEnd.price + deltaP,
+            };
+            const updated = calculateMeasurement(newStart, newEnd);
+            onUpdateMeasurement({ ...updated, id: target.id });
+          }
+        }
+        return;
+      }
     }
 
     // Hit test check for active handles / drawings / overlays to maintain interactive hover
     let isHit = false;
     for (const m of measurements) {
-      const sx1 = timeToX(m.start.time);
-      const sy1 = priceToY(m.start.price);
-      const sx2 = timeToX(m.end.time);
-      const sy2 = priceToY(m.end.price);
-      if ((sx1 !== null && sy1 !== null && Math.hypot(sx1 - x, sy1 - y) < 12) ||
-          (sx2 !== null && sy2 !== null && Math.hypot(sx2 - x, sy2 - y) < 12)) {
+      if (isMeasurementHit(m, x, y, timeToX, priceToY)) {
         isHit = true;
         break;
       }
     }
     if (!isHit) {
       for (const d of drawings) {
-        for (let i = 0; i < d.points.length; i++) {
-          const px = timeToX(d.points[i].time);
-          const py = priceToY(d.points[i].price);
-          if (px !== null && py !== null && Math.hypot(px - x, py - y) < 12) {
-            isHit = true;
-            break;
-          }
+        if (isDrawingHit(d, x, y, timeToX, priceToY, width)) {
+          isHit = true;
+          break;
         }
-        if (isHit) break;
       }
     }
 
@@ -376,27 +477,53 @@ export default function DrawingOverlayCanvas({
     setIsHoveringInteractive(isHit);
   };
 
-  // Mouse Up: Finalize drawing creation or handle release
-  const handleMouseUp = () => {
+  // Pointer Up: Finalize drawing creation or release handles / movements
+  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+    } catch {}
+
     if (activeHandle) {
       setActiveHandle(null);
       return;
     }
 
+    if (activeMove) {
+      setActiveMove(null);
+      return;
+    }
+
     if (isMouseCreating && startPoint && currentMousePoint) {
+      let finalEndPoint = currentMousePoint;
+      const x1 = timeToX(startPoint.time);
+      const y1 = priceToY(startPoint.price);
+      const x2 = timeToX(currentMousePoint.time);
+      const y2 = priceToY(currentMousePoint.price);
+
+      // If clicked without dragging (distance < 5px), create a clean visible span
+      if (x1 !== null && y1 !== null && x2 !== null && y2 !== null && Math.hypot(x2 - x1, y2 - y1) < 5) {
+        const offsetTime = xToTime(x1 + 100) ?? (startPoint.time + 86400 * 3);
+        const offsetPrice = yToPrice(y1 - 25) ?? (startPoint.price * 1.015);
+        finalEndPoint = { time: offsetTime, price: offsetPrice };
+      }
+
       if (activeDrawingTool === 'ruler') {
-        const m = calculateMeasurement(startPoint, currentMousePoint);
+        const m = calculateMeasurement(startPoint, finalEndPoint);
         onAddMeasurement(m);
-      } else if (activeDrawingTool !== 'cursor') {
+      } else if (activeDrawingTool !== 'cursor' && activeDrawingTool !== 'select') {
         const newDrawing: Drawing = {
           id: `draw-${Date.now()}`,
           type: activeDrawingTool,
-          points: [startPoint, currentMousePoint],
+          points: [startPoint, finalEndPoint],
           style: {
-            color: activeDrawingTool === 'fibonacci' ? '#8b5cf6' : '#00e5ff',
-            lineWidth: 1.5,
+            color: drawingColor,
+            lineWidth: drawingLineWidth,
             lineStyle: 'solid',
-            fillColor: 'rgba(0, 229, 255, 0.08)',
+            fillColor: `${drawingColor}22`,
           },
         };
         onAddDrawing(newDrawing);
@@ -410,7 +537,7 @@ export default function DrawingOverlayCanvas({
   };
 
   const isCursorMode = activeDrawingTool === 'cursor';
-  const hasSelectedOrActive = selectedDrawingId !== null || activeHandle !== null;
+  const isInteracting = activeHandle !== null || activeMove !== null || isMouseCreating;
 
   return (
     <div
@@ -420,28 +547,40 @@ export default function DrawingOverlayCanvas({
         left: 0,
         width,
         height,
-<<<<<<< HEAD
-        // In cursor mode without an active handle/selection, pass pointer events through to Lightweight Charts,
-        // unless mouse is interacting or a tool is selected.
-        pointerEvents: isCursorMode && !hasSelectedOrActive && !isMouseCreating ? 'none' : 'auto',
-=======
-        pointerEvents: isCursorMode && !activeHandle && !isHoveringInteractive && !selectedDrawingId ? 'none' : 'auto',
->>>>>>> origin/feat/professional-charting-engine-phase2-8693883767786362205
+        zIndex: 20,
+        touchAction: isCursorMode ? 'auto' : 'none',
+        pointerEvents: isCursorMode && !isInteracting ? 'none' : 'auto',
       }}
     >
       <canvas
         ref={canvasRef}
         width={width}
         height={height}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
         style={{
-<<<<<<< HEAD
-          cursor: activeDrawingTool !== 'cursor' ? 'crosshair' : hasSelectedOrActive ? 'pointer' : 'default',
-=======
-          cursor: activeDrawingTool !== 'cursor' ? 'crosshair' : isHoveringInteractive ? 'pointer' : 'default',
->>>>>>> origin/feat/professional-charting-engine-phase2-8693883767786362205
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          zIndex: 21,
+          touchAction: isCursorMode ? 'auto' : 'none',
+          pointerEvents: isCursorMode && !isInteracting ? 'none' : 'auto',
+          cursor:
+            activeDrawingTool === 'cursor'
+              ? 'default'
+              : activeDrawingTool !== 'select'
+              ? 'crosshair'
+              : activeHandle !== null
+              ? 'grab'
+              : activeMove !== null
+              ? 'grabbing'
+              : isHoveringInteractive
+              ? 'pointer'
+              : 'default',
         }}
       />
 
@@ -490,21 +629,29 @@ function renderDrawingItem(
   priceToY: (p: number) => number | null
 ) {
   if (drawing.points.length === 0) return;
-  ctx.strokeStyle = isSelected ? '#f59e0b' : drawing.style?.color ?? '#00e5ff';
-  ctx.lineWidth = drawing.style?.lineWidth ?? 1.5;
-  ctx.fillStyle = drawing.style?.fillColor ?? 'rgba(0, 229, 255, 0.08)';
+  const color = drawing.style?.color ?? '#00e5ff';
+  const lineWidth = drawing.style?.lineWidth ?? 2;
+
+  ctx.strokeStyle = isSelected ? '#f59e0b' : color;
+  ctx.lineWidth = isSelected ? lineWidth + 1.5 : lineWidth;
+  ctx.fillStyle = drawing.style?.fillColor ?? `${color}22`;
 
   const p1 = drawing.points[0];
   const x1 = timeToX(p1.time);
   const y1 = priceToY(p1.price);
   if (x1 === null || y1 === null) return;
 
-  // Endpoint handles
+  // Endpoint handle for p1
   if (isSelected) {
     ctx.fillStyle = '#f59e0b';
     ctx.beginPath();
     ctx.arc(x1, y1, 5, 0, Math.PI * 2);
     ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = lineWidth + 1.5;
   }
 
   if (drawing.type === 'horizontalLine') {
@@ -512,6 +659,16 @@ function renderDrawingItem(
     ctx.moveTo(0, y1);
     ctx.lineTo(ctx.canvas.width, y1);
     ctx.stroke();
+
+    // Price tag pill on the right
+    ctx.fillStyle = isSelected ? '#f59e0b' : color;
+    const priceText = `$${formatFigure(p1.price)}`;
+    ctx.font = 'bold 10px var(--font-mono, monospace)';
+    const textWidth = ctx.measureText(priceText).width;
+    const tagX = ctx.canvas.width - textWidth - 14;
+    ctx.fillRect(tagX - 4, y1 - 9, textWidth + 8, 18);
+    ctx.fillStyle = '#080a0f';
+    ctx.fillText(priceText, tagX, y1 + 3);
     return;
   }
 
@@ -524,9 +681,18 @@ function renderDrawingItem(
   }
 
   if (drawing.type === 'text') {
-    ctx.fillStyle = isSelected ? '#f59e0b' : drawing.style?.color ?? '#00e5ff';
-    ctx.font = '12px var(--font-mono, monospace)';
-    ctx.fillText(drawing.text ?? 'Note', x1 + 4, y1 - 4);
+    const text = drawing.text ?? 'Note';
+    ctx.font = 'bold 12px var(--font-mono, monospace)';
+    const tw = ctx.measureText(text).width;
+    // Background card for text note
+    ctx.fillStyle = 'rgba(18, 24, 36, 0.9)';
+    ctx.fillRect(x1 + 4, y1 - 18, tw + 12, 22);
+    ctx.strokeStyle = isSelected ? '#f59e0b' : color;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x1 + 4, y1 - 18, tw + 12, 22);
+
+    ctx.fillStyle = isSelected ? '#f59e0b' : color;
+    ctx.fillText(text, x1 + 10, y1 - 3);
     return;
   }
 
@@ -536,11 +702,17 @@ function renderDrawingItem(
   const y2 = priceToY(p2.price);
   if (x2 === null || y2 === null) return;
 
+  // Endpoint handle for p2
   if (isSelected) {
     ctx.fillStyle = '#f59e0b';
     ctx.beginPath();
     ctx.arc(x2, y2, 5, 0, Math.PI * 2);
     ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = lineWidth + 1.5;
   }
 
   if (drawing.type === 'trendline') {
@@ -552,7 +724,7 @@ function renderDrawingItem(
     const angle = Math.atan2(y2 - y1, x2 - x1);
     ctx.beginPath();
     ctx.moveTo(x1, y1);
-    ctx.lineTo(x1 + Math.cos(angle) * 2000, y1 + Math.sin(angle) * 2000);
+    ctx.lineTo(x1 + Math.cos(angle) * 3000, y1 + Math.sin(angle) * 3000);
     ctx.stroke();
   } else if (drawing.type === 'arrow') {
     ctx.beginPath();
@@ -561,32 +733,49 @@ function renderDrawingItem(
     ctx.stroke();
     // Arrowhead
     const angle = Math.atan2(y2 - y1, x2 - x1);
+    ctx.fillStyle = isSelected ? '#f59e0b' : color;
     ctx.beginPath();
     ctx.moveTo(x2, y2);
-    ctx.lineTo(x2 - 10 * Math.cos(angle - Math.PI / 6), y2 - 10 * Math.sin(angle - Math.PI / 6));
-    ctx.lineTo(x2 - 10 * Math.cos(angle + Math.PI / 6), y2 - 10 * Math.sin(angle + Math.PI / 6));
+    ctx.lineTo(x2 - 12 * Math.cos(angle - Math.PI / 6), y2 - 12 * Math.sin(angle - Math.PI / 6));
+    ctx.lineTo(x2 - 12 * Math.cos(angle + Math.PI / 6), y2 - 12 * Math.sin(angle + Math.PI / 6));
+    ctx.closePath();
     ctx.fill();
   } else if (drawing.type === 'rectangle') {
-    const rw = x2 - x1;
-    const rh = y2 - y1;
-    ctx.fillRect(x1, y1, rw, rh);
-    ctx.strokeRect(x1, y1, rw, rh);
+    const rx = Math.min(x1, x2);
+    const ry = Math.min(y1, y2);
+    const rw = Math.abs(x2 - x1);
+    const rh = Math.abs(y2 - y1);
+    ctx.fillStyle = drawing.style?.fillColor ?? `${color}22`;
+    ctx.fillRect(rx, ry, rw, rh);
+    ctx.strokeRect(rx, ry, rw, rh);
   } else if (drawing.type === 'fibonacci') {
-    const levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0];
+    const levels = [
+      { lvl: 0, label: '0.0%', c: '#94a3b8' },
+      { lvl: 0.236, label: '23.6%', c: '#a855f7' },
+      { lvl: 0.382, label: '38.2%', c: '#38bdf8' },
+      { lvl: 0.5, label: '50.0%', c: '#00e5ff' },
+      { lvl: 0.618, label: '61.8%', c: '#10b981' },
+      { lvl: 0.786, label: '78.6%', c: '#f59e0b' },
+      { lvl: 1.0, label: '100.0%', c: '#f43f5e' },
+    ];
     const diff = p2.price - p1.price;
+    const minX = Math.min(x1, x2);
+    const maxX = Math.max(x1, x2);
 
-    levels.forEach((lvl) => {
+    levels.forEach(({ lvl, label, c }) => {
       const fibPrice = p1.price + diff * lvl;
       const fy = priceToY(fibPrice);
       if (fy !== null) {
-        ctx.strokeStyle = lvl === 0.5 || lvl === 0.618 ? '#00e5ff' : '#8b5cf6';
+        ctx.strokeStyle = isSelected ? '#f59e0b' : (drawing.style?.color || c);
+        ctx.lineWidth = lvl === 0.5 || lvl === 0.618 ? 2 : 1.2;
         ctx.beginPath();
-        ctx.moveTo(Math.min(x1, x2), fy);
-        ctx.lineTo(Math.max(x1, x2), fy);
+        ctx.moveTo(minX, fy);
+        ctx.lineTo(maxX, fy);
         ctx.stroke();
-        ctx.fillStyle = '#94a3b8';
-        ctx.font = '10px var(--font-mono, monospace)';
-        ctx.fillText(`${(lvl * 100).toFixed(1)}% ($${formatFigure(fibPrice)})`, Math.max(x1, x2) + 4, fy + 3);
+
+        ctx.fillStyle = isSelected ? '#f59e0b' : c;
+        ctx.font = 'bold 10px var(--font-mono, monospace)';
+        ctx.fillText(`${label} ($${formatFigure(fibPrice)})`, maxX + 6, fy + 3);
       }
     });
   }
@@ -606,10 +795,18 @@ function renderMeasurementItem(
   if (x1 === null || y1 === null || x2 === null || y2 === null) return;
 
   // Dotted box and diagonal
+  const rx = Math.min(x1, x2);
+  const ry = Math.min(y1, y2);
+  const rw = Math.abs(x2 - x1);
+  const rh = Math.abs(y2 - y1);
+
+  ctx.fillStyle = m.priceChange >= 0 ? 'rgba(16, 185, 129, 0.08)' : 'rgba(244, 63, 94, 0.08)';
+  ctx.fillRect(rx, ry, rw, rh);
+
   ctx.strokeStyle = isSelected ? '#f59e0b' : '#f59e0b';
   ctx.lineWidth = 1.5;
   ctx.setLineDash([4, 4]);
-  ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+  ctx.strokeRect(rx, ry, rw, rh);
   ctx.beginPath();
   ctx.moveTo(x1, y1);
   ctx.lineTo(x2, y2);
@@ -626,10 +823,10 @@ function renderMeasurementItem(
   // Badge callout
   const midX = (x1 + x2) / 2;
   const midY = (y1 + y2) / 2;
-  ctx.fillStyle = 'rgba(18, 24, 36, 0.9)';
+  ctx.fillStyle = 'rgba(18, 24, 36, 0.95)';
   ctx.strokeStyle = '#f59e0b';
-  ctx.fillRect(midX - 60, midY - 20, 120, 40);
-  ctx.strokeRect(midX - 60, midY - 20, 120, 40);
+  ctx.fillRect(midX - 65, midY - 22, 130, 44);
+  ctx.strokeRect(midX - 65, midY - 22, 130, 44);
 
   ctx.fillStyle = m.priceChange >= 0 ? '#10b981' : '#f43f5e';
   ctx.font = 'bold 11px var(--font-mono, monospace)';
@@ -648,7 +845,9 @@ function renderInProgressPreview(
   start: ChartPoint,
   curr: ChartPoint,
   timeToX: (t: number) => number | null,
-  priceToY: (p: number) => number | null
+  priceToY: (p: number) => number | null,
+  drawingColor: string,
+  drawingLineWidth: number
 ) {
   const x1 = timeToX(start.time);
   const y1 = priceToY(start.price);
@@ -656,20 +855,58 @@ function renderInProgressPreview(
   const y2 = priceToY(curr.price);
   if (x1 === null || y1 === null || x2 === null || y2 === null) return;
 
-  ctx.strokeStyle = 'rgba(0, 229, 255, 0.6)';
-  ctx.lineWidth = 1.5;
-  ctx.setLineDash([2, 2]);
+  ctx.strokeStyle = drawingColor || '#00e5ff';
+  ctx.lineWidth = Math.max(2, drawingLineWidth);
+  ctx.setLineDash([4, 4]);
 
   if (tool === 'ruler') {
-    ctx.strokeStyle = 'rgba(245, 158, 11, 0.8)';
-    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+    ctx.strokeStyle = '#f59e0b';
+    const rx = Math.min(x1, x2);
+    const ry = Math.min(y1, y2);
+    const rw = Math.abs(x2 - x1);
+    const rh = Math.abs(y2 - y1);
+    ctx.fillStyle = 'rgba(245, 158, 11, 0.1)';
+    ctx.fillRect(rx, ry, rw, rh);
+    ctx.strokeRect(rx, ry, rw, rh);
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
     ctx.stroke();
   } else if (tool === 'rectangle') {
-    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+    const rx = Math.min(x1, x2);
+    const ry = Math.min(y1, y2);
+    const rw = Math.abs(x2 - x1);
+    const rh = Math.abs(y2 - y1);
+    ctx.fillStyle = `${drawingColor}22`;
+    ctx.fillRect(rx, ry, rw, rh);
+    ctx.strokeRect(rx, ry, rw, rh);
+  } else if (tool === 'horizontalLine') {
+    ctx.beginPath();
+    ctx.moveTo(0, y1);
+    ctx.lineTo(ctx.canvas.width, y1);
+    ctx.stroke();
+  } else if (tool === 'verticalLine') {
+    ctx.beginPath();
+    ctx.moveTo(x1, 0);
+    ctx.lineTo(x1, ctx.canvas.height);
+    ctx.stroke();
+  } else if (tool === 'fibonacci') {
+    const levels = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0];
+    const diff = curr.price - start.price;
+    const minX = Math.min(x1, x2);
+    const maxX = Math.max(x1, x2);
+    levels.forEach((lvl) => {
+      const fibPrice = start.price + diff * lvl;
+      const fy = priceToY(fibPrice);
+      if (fy !== null) {
+        ctx.beginPath();
+        ctx.moveTo(minX, fy);
+        ctx.lineTo(maxX, fy);
+        ctx.stroke();
+      }
+    });
   } else {
+    // trendline, ray, arrow
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);

@@ -52,6 +52,33 @@ def rsi(frame: pd.DataFrame, window: int | None = 14) -> pd.Series:
     return 100.0 - (100.0 / (1.0 + relative_strength))
 
 
+def corroborated_sentiment(frame: pd.DataFrame, _window: int | None = None) -> pd.Series:
+    sentiment = pd.to_numeric(
+        frame.get("sentiment_polarity", frame.get("sentiment_z", pd.Series(0.0, index=frame.index))),
+        errors="coerce",
+    ).fillna(0.0)
+    corroboration = pd.to_numeric(
+        frame.get("corroboration", pd.Series(0.75, index=frame.index)), errors="coerce"
+    ).fillna(0.75)
+    return sentiment * (corroboration ** 2)
+
+
+def csvd_divergence(frame: pd.DataFrame, window: int | None = 20) -> pd.Series:
+    w = window or 20
+    cwsi = corroborated_sentiment(frame)
+    cwsi_mean = cwsi.rolling(w).mean()
+    cwsi_std = cwsi.rolling(w).std().replace(0, pd.NA).fillna(0.01)
+    z_sentiment = (cwsi - cwsi_mean) / cwsi_std
+
+    price = pd.to_numeric(frame["price"], errors="coerce")
+    price_ret = price.pct_change().fillna(0.0)
+    ret_mean = price_ret.rolling(w).mean()
+    ret_std = price_ret.rolling(w).std().replace(0, pd.NA).fillna(0.0001)
+    z_price = (price_ret - ret_mean) / ret_std
+
+    return (z_sentiment - z_price).clip(-4.0, 4.0).fillna(0.0)
+
+
 class FactorEngine:
     """Deterministic, composable factor calculator with auditable attribution."""
 
@@ -62,6 +89,8 @@ class FactorEngine:
         "sma_deviation": sma_deviation,
         "rsi": rsi,
         "sentiment_z": lambda frame, _window: pd.to_numeric(frame["sentiment_z"], errors="coerce"),
+        "corroborated_sentiment": corroborated_sentiment,
+        "csvd_divergence": csvd_divergence,
     }
 
     def __init__(self, factors: dict[str, float], windows: dict[str, int] | None = None) -> None:
