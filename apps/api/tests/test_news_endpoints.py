@@ -12,7 +12,6 @@ async_client fixture so no running PostgreSQL is needed.
 
 import uuid
 from datetime import datetime, timezone
-
 UTC = timezone.utc
 from typing import Any
 

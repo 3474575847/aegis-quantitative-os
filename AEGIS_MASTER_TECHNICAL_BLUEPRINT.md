@@ -324,12 +324,8 @@ class NewsArticleRecord(Base):
     language: Mapped[str] = mapped_column(String(10), default="en")
 
     # Point-in-time timestamps
-    published_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), index=True, nullable=False
-    )
-    available_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), index=True, nullable=False
-    )
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, nullable=False)
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, nullable=False)
     retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # Entity tags

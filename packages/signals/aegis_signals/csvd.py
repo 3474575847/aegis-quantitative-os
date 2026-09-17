@@ -69,9 +69,7 @@ class CSVDProcessor(BaseSignalProcessor):
         # 3. Price Return & Z-score
         price_ret = price.pct_change().fillna(0.0)
         ret_mean = price_ret.rolling(window=window, min_periods=1).mean().fillna(0.0)
-        ret_std = (
-            price_ret.rolling(window=window, min_periods=1).std().fillna(0.0001).replace(0, 0.0001)
-        )
+        ret_std = price_ret.rolling(window=window, min_periods=1).std().fillna(0.0001).replace(0, 0.0001)
         z_price = (price_ret - ret_mean) / ret_std
 
         # 4. Sentiment Z-score

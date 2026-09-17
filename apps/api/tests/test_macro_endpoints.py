@@ -12,7 +12,6 @@ conflicts across tests that share one SQLite instance.
 
 import uuid
 from datetime import date, datetime, timezone
-
 UTC = timezone.utc
 from typing import Any
 

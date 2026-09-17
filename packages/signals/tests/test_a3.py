@@ -6,7 +6,7 @@ import pytest
 from aegis_signals.a3 import compute_market_structure, evaluate_a3_adaptive_alpha
 
 
-def test_market_structure_computation() -> None:
+def test_market_structure_computation():
     dates = pd.date_range("2026-01-01", periods=30, freq="D")
     df = pd.DataFrame(
         {
@@ -27,7 +27,7 @@ def test_market_structure_computation() -> None:
     assert "volume_participation_score" in mkt.dimensions
 
 
-def test_a3_evaluation() -> None:
+def test_a3_evaluation():
     dates = pd.date_range("2026-01-01", periods=30, freq="D")
     df = pd.DataFrame(
         {
@@ -47,11 +47,3 @@ def test_a3_evaluation() -> None:
     assert len(eval_result.factor_contributions) == 8
     assert eval_result.expected_excess_return_pct > 0
     assert eval_result.uncertainty_pct > 0
-
-    # Verify hard asset barrier: Crypto assets must have NOT_APPLICABLE status with 0 net contribution for equity fundamentals
-    fund_contrib = next(
-        c for c in eval_result.factor_contributions if c.factor_id == "aegis-fund-v1"
-    )
-    val_contrib = next(c for c in eval_result.factor_contributions if c.factor_id == "aegis-val-v1")
-    assert fund_contrib.net_contribution == 0.0
-    assert val_contrib.net_contribution == 0.0

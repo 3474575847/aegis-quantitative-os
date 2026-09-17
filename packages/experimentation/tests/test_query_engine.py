@@ -1,6 +1,5 @@
 from collections.abc import AsyncGenerator
 from datetime import datetime, timedelta, timezone
-
 UTC = timezone.utc
 
 import pytest

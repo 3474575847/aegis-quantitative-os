@@ -12,7 +12,6 @@ publication timestamp, ensuring zero look-ahead bias in backtests.
 
 import uuid
 from datetime import datetime, timezone
-
 UTC = timezone.utc
 
 from aegis_observability.logger import get_logger

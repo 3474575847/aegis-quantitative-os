@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-
 UTC = timezone.utc
 from typing import Any
 from uuid import UUID, uuid4
@@ -18,10 +17,6 @@ class SignalDefinition(BaseModel):
     description: str | None = None
     parameters: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
-    asset_class: str = Field(default="CROSS_ASSET")
-    signal_horizon: str = Field(default="1d")
-    prediction_horizon_bars: int = Field(default=1)
-    holding_horizon_bars: int = Field(default=1)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -46,8 +41,6 @@ class SignalResult(BaseModel):
     timestamp: datetime
     value: float
     metadata: dict[str, Any] = Field(default_factory=dict)
-    applicability_status: str = Field(default="VALID")
-    uncertainty: float | None = Field(default=None)
 
 
 class SignalMetric(BaseModel):

@@ -23,7 +23,6 @@ import contextlib
 import os
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
-
 UTC = timezone.utc
 from typing import Any
 

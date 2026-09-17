@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-
 UTC = timezone.utc
 
 from aegis_observability.logger import get_logger
