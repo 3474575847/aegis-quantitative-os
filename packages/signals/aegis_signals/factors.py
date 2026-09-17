@@ -2,9 +2,16 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from enum import Enum
 from typing import ClassVar
 
 import pandas as pd
+
+
+class ApplicabilityStatus(str, Enum):
+    VALID = "VALID"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+    DATA_UNAVAILABLE = "DATA_UNAVAILABLE"
 
 
 @dataclass(frozen=True)
@@ -13,6 +20,7 @@ class FactorResult:
     value: float
     weight: float
     contribution: float
+    applicability_status: ApplicabilityStatus = ApplicabilityStatus.VALID
 
 
 FactorFunction = Callable[[pd.DataFrame, int | None], pd.Series]
@@ -54,13 +62,15 @@ def rsi(frame: pd.DataFrame, window: int | None = 14) -> pd.Series:
 
 def corroborated_sentiment(frame: pd.DataFrame, _window: int | None = None) -> pd.Series:
     sentiment = pd.to_numeric(
-        frame.get("sentiment_polarity", frame.get("sentiment_z", pd.Series(0.0, index=frame.index))),
+        frame.get(
+            "sentiment_polarity", frame.get("sentiment_z", pd.Series(0.0, index=frame.index))
+        ),
         errors="coerce",
     ).fillna(0.0)
     corroboration = pd.to_numeric(
         frame.get("corroboration", pd.Series(0.75, index=frame.index)), errors="coerce"
     ).fillna(0.75)
-    return sentiment * (corroboration ** 2)
+    return sentiment * (corroboration**2)
 
 
 def csvd_divergence(frame: pd.DataFrame, window: int | None = 20) -> pd.Series:
@@ -112,7 +122,8 @@ class FactorEngine:
 
     @staticmethod
     def combine(results: list[FactorResult]) -> float:
-        total_weight = sum(abs(result.weight) for result in results)
+        valid_results = [r for r in results if r.applicability_status == ApplicabilityStatus.VALID]
+        total_weight = sum(abs(result.weight) for result in valid_results)
         if total_weight == 0:
             return 0.0
-        return sum(result.contribution for result in results) / total_weight
+        return sum(result.contribution for result in valid_results) / total_weight

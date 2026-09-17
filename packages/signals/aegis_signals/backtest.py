@@ -170,3 +170,40 @@ def run_signal_backtest(
             for idx, val in equity.items()
         ],
     }
+
+
+def run_baseline_comparison(
+    prices: pd.Series,
+    expert_signal: pd.Series,
+    transaction_cost_bps: float = 5.0,
+) -> dict[str, dict[str, Any]]:
+    """
+    Evaluates an expert signal against simple research baselines:
+    1. Flat (No Trade)
+    2. Buy and Hold
+    3. Simple Momentum (Sign of returns)
+    4. Simple SMA Crossover
+    5. Expert Signal
+    """
+    aligned = pd.concat([prices.rename("price"), expert_signal.rename("signal")], axis=1).dropna()
+    px = aligned["price"]
+    sig = aligned["signal"]
+
+    # Baselines
+    flat_sig = pd.Series(0.0, index=px.index)
+    bnh_sig = pd.Series(1.0, index=px.index)
+    mom_sig = px.pct_change().apply(lambda v: 1.0 if v > 0 else -1.0 if v < 0 else 0.0).fillna(0.0)
+    sma20 = px.rolling(20).mean()
+    sma_sig = (px > sma20).apply(lambda v: 1.0 if v else -1.0).fillna(0.0)
+
+    return {
+        "flat": run_signal_backtest(px, flat_sig, transaction_cost_bps=0.0),
+        "buy_and_hold": run_signal_backtest(px, bnh_sig, transaction_cost_bps=transaction_cost_bps),
+        "simple_momentum": run_signal_backtest(
+            px, mom_sig, transaction_cost_bps=transaction_cost_bps
+        ),
+        "sma_crossover": run_signal_backtest(
+            px, sma_sig, transaction_cost_bps=transaction_cost_bps
+        ),
+        "expert_signal": run_signal_backtest(px, sig, transaction_cost_bps=transaction_cost_bps),
+    }

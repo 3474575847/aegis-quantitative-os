@@ -60,3 +60,69 @@ def volatility_normalization(data: pd.Series, window: int, target_vol: float = 0
 def rolling_rank(data: pd.Series, window: int) -> pd.Series:
     """Compute rolling percentile rank (0 to 1)."""
     return data.rolling(window=window).rank(pct=True)
+
+
+def evaluate_forward_outcomes(
+    predictions: pd.Series,
+    prices: pd.Series,
+    horizons: list[int] | None = None,
+    transaction_cost_tiers_bps: list[float] | None = None,
+) -> dict[int, dict[str, float | dict[str, dict[str, float]]]]:
+    """
+    Evaluates point-in-time predictions against realized multi-horizon outcomes.
+
+    Ensures zero future information leakage by shifting forward returns by +h bars
+    relative to signal decision timestamp t.
+    """
+    if horizons is None:
+        horizons = [1, 3, 6, 12, 24, 48]
+    if transaction_cost_tiers_bps is None:
+        transaction_cost_tiers_bps = [0.0, 5.0, 10.0, 20.0, 30.0]
+
+    results: dict[int, dict[str, float | dict[str, dict[str, float]]]] = {}
+    aligned = pd.concat([predictions.rename("pred"), prices.rename("price")], axis=1).dropna()
+    if len(aligned) < 5:
+        return results
+
+    preds = aligned["pred"]
+    px = aligned["price"]
+
+    for h in horizons:
+        fwd_returns = (px.shift(-h) - px) / px
+        valid_mask = preds.notna() & fwd_returns.notna()
+        p_valid = preds[valid_mask]
+        r_valid = fwd_returns[valid_mask]
+
+        if len(p_valid) < 3:
+            continue
+
+        ic = float(p_valid.rank().corr(r_valid.rank())) if len(p_valid) > 2 else 0.0
+        hit_rate = float(
+            (
+                p_valid.apply(lambda x: 1 if x > 0 else -1)
+                == r_valid.apply(lambda x: 1 if x > 0 else -1)
+            ).mean()
+        )
+        mae = float((p_valid - r_valid).abs().mean())
+
+        cost_evals: dict[str, dict[str, float]] = {}
+        for cost_bps in transaction_cost_tiers_bps:
+            cost_pct = cost_bps / 10000.0
+            pos = p_valid.apply(lambda x: 1.0 if x > 0 else -1.0 if x < 0 else 0.0)
+            net_ret = pos * r_valid - cost_pct
+            cost_evals[f"{cost_bps}bps"] = {
+                "mean_net_return": float(net_ret.mean()),
+                "total_net_return": float(net_ret.sum()),
+                "post_cost_hit_rate": float((net_ret > 0).mean()),
+            }
+
+        results[h] = {
+            "horizon_bars": float(h),
+            "sample_count": float(len(p_valid)),
+            "information_coefficient": round(ic, 4),
+            "hit_rate": round(hit_rate, 4),
+            "mae": round(mae, 6),
+            "cost_sensitivity": cost_evals,
+        }
+
+    return results

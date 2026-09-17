@@ -43,3 +43,28 @@ def test_factor_engine_returns_auditable_attribution() -> None:
 def test_unknown_factor_fails_explicitly() -> None:
     with pytest.raises(ValueError, match="Unknown factor"):
         FactorEngine({"does_not_exist": 1.0}).calculate(_frame())
+
+
+def test_research_experts_exp01_exp02_exp11() -> None:
+    from aegis_signals.processors import (
+        BipowerJumpProcessor,
+        HarqVolProcessor,
+        VolScaledTsmomProcessor,
+    )
+
+    df = pd.DataFrame(
+        {
+            "price": [100.0 + (i % 5) * 2.0 - (i % 3) * 1.5 for i in range(30)],
+        }
+    )
+
+    exp01 = VolScaledTsmomProcessor().compute(df, {"lookback": 5, "vol_window": 10})
+    exp02 = HarqVolProcessor().compute(df, {})
+    exp11 = BipowerJumpProcessor().compute(df, {})
+
+    assert len(exp01) == 30
+    assert len(exp02) == 30
+    assert len(exp11) == 30
+    assert not exp01.isna().all()
+    assert not exp02.isna().all()
+    assert (exp11 >= 0.0).all()

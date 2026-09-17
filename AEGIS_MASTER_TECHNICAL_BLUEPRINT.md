@@ -322,22 +322,26 @@ class NewsArticleRecord(Base):
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     description: Mapped[str | None] = mapped_column(String(4096), nullable=True)
     language: Mapped[str] = mapped_column(String(10), default="en")
-    
+
     # Point-in-time timestamps
-    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, nullable=False)
-    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, nullable=False)
+    published_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), index=True, nullable=False
+    )
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), index=True, nullable=False
+    )
     retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    
+
     # Entity tags
     tickers: Mapped[list[str]] = mapped_column(SQLiteCompatibleARRAY(String), default=list)
     topics: Mapped[list[str]] = mapped_column(SQLiteCompatibleARRAY(String), default=list)
-    
+
     # Sentiment & quality
     provider_sentiment_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     aegis_sentiment_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     confidence: Mapped[float] = mapped_column(Float, default=1.0)
     data_quality: Mapped[str] = mapped_column(String(20), default="VERIFIED")
-    
+
     raw_metadata: Mapped[dict[str, Any]] = mapped_column(SQLiteCompatibleJSONB, default=dict)
 ```
 

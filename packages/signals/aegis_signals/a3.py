@@ -102,11 +102,23 @@ def compute_market_structure(symbol: str, df: pd.DataFrame) -> MarketStructureSn
                 "multi_timeframe_alignment": 0.5,
             },
             regime="NEUTRAL_RANGE",
-            details={"sma20_dist_pct": 0, "sma50_dist_pct": 0, "mom5d_pct": 0, "vol_zscore": 0, "atr_pct": 0, "rsi14": 50, "overextended": False},
+            details={
+                "sma20_dist_pct": 0,
+                "sma50_dist_pct": 0,
+                "mom5d_pct": 0,
+                "vol_zscore": 0,
+                "atr_pct": 0,
+                "rsi14": 50,
+                "overextended": False,
+            },
         )
 
     closes = pd.to_numeric(df["close"], errors="coerce").fillna(100.0).values
-    volumes = pd.to_numeric(df.get("volume", pd.Series(1000, index=df.index)), errors="coerce").fillna(1000.0).values
+    volumes = (
+        pd.to_numeric(df.get("volume", pd.Series(1000, index=df.index)), errors="coerce")
+        .fillna(1000.0)
+        .values
+    )
     n = len(closes)
     latest_close = closes[-1]
 
@@ -143,7 +155,9 @@ def compute_market_structure(symbol: str, df: pd.DataFrame) -> MarketStructureSn
 
     rets = np.diff(closes[-21:]) / closes[-21:-1] if n >= 21 else np.array([0.0])
     vol_ann = float(np.std(rets, ddof=1) * math.sqrt(252)) if len(rets) > 1 else 0.2
-    volatility_score = max(-2.5, min(2.5, -1.5 if vol_ann > 0.6 else -0.5 if vol_ann > 0.35 else 0.5))
+    volatility_score = max(
+        -2.5, min(2.5, -1.5 if vol_ann > 0.6 else -0.5 if vol_ann > 0.35 else 0.5)
+    )
 
     std20 = float(np.std(closes[-20:], ddof=1)) or 1.0
     z_dev = (latest_close - sma20) / std20
@@ -157,10 +171,20 @@ def compute_market_structure(symbol: str, df: pd.DataFrame) -> MarketStructureSn
     align_count = (1 if short_bull == med_bull else 0) + (1 if med_bull == long_bull else 0)
     mtf_align = 1.0 if align_count == 2 else 0.65 if align_count == 1 else 0.3
 
-    comp_tech = float(round(
-        (trend_score * 0.25 + momentum_score * 0.2 + residual_momentum_score * 0.15 +
-         volume_participation_score * 0.15 + price_structure_score * 0.15 + volatility_score * 0.1) * mtf_align, 4
-    ))
+    comp_tech = float(
+        round(
+            (
+                trend_score * 0.25
+                + momentum_score * 0.2
+                + residual_momentum_score * 0.15
+                + volume_participation_score * 0.15
+                + price_structure_score * 0.15
+                + volatility_score * 0.1
+            )
+            * mtf_align,
+            4,
+        )
+    )
 
     regime = "NEUTRAL_RANGE"
     if vol_ann > 0.6:
@@ -203,15 +227,29 @@ def compute_market_structure(symbol: str, df: pd.DataFrame) -> MarketStructureSn
     )
 
 
-def evaluate_a3_adaptive_alpha(symbol: str, df: pd.DataFrame, csvd_score: float = 1.2) -> A3SignalEvaluation:
+def evaluate_a3_adaptive_alpha(
+    symbol: str, df: pd.DataFrame, csvd_score: float = 1.2, asset_category: str = "AUTO"
+) -> A3SignalEvaluation:
     mkt = compute_market_structure(symbol, df)
     sym = symbol.upper().strip()
 
+    is_crypto = (
+        asset_category.upper() == "CRYPTO"
+        or sym in ("BTC", "ETH", "BTC-USD", "ETH-USD", "BTCUSD", "ETHUSD")
+        or "BTC" in sym
+        or "ETH" in sym
+    )
+
     csvd_factor = csvd_score
     exp_factor = 0.8
-    fund_factor = 0.6
     mkt_factor = mkt.composite_technical_score
-    val_factor = -0.2
+
+    # Asset Applicability Barrier: Fundamental factors on Crypto evaluate to NOT_APPLICABLE
+    fund_status = "NOT_APPLICABLE" if is_crypto else "VALID"
+    val_status = "NOT_APPLICABLE" if is_crypto else "VALID"
+
+    fund_factor = 0.0 if is_crypto else 0.6
+    val_factor = 0.0 if is_crypto else -0.2
 
     news_vs_price = round(csvd_factor - mkt_factor, 4)
     fund_vs_price = round(fund_factor - val_factor, 4)
@@ -225,18 +263,19 @@ def evaluate_a3_adaptive_alpha(symbol: str, df: pd.DataFrame, csvd_score: float 
         analysts_vs_management=0.35,
         composite_disagreement=comp_disag,
         interpretation="High-conviction corroborated news has arrived but price has not yet fully reacted (Bullish Information Gap)."
-        if news_vs_price > 1.0 else "Market pricing is in relative alignment with narrative & fundamental inputs.",
+        if news_vs_price > 1.0
+        else "Market pricing is in relative alignment with narrative & fundamental inputs.",
     )
 
     factors_raw = {
-        "aegis-csvd-v1": (csvd_factor, "C-SVD Information Discovery"),
-        "aegis-exp-v1": (exp_factor, "Expectation Dislocation & Revision Breadth"),
-        "aegis-fund-v1": (fund_factor, "Fundamental Inflection & Acceleration"),
-        "aegis-mkt-v1": (mkt_factor, "Market Repricing & Trend Persistence"),
-        "aegis-val-v1": (val_factor, "Valuation Dislocation"),
-        "aegis-vol-v1": (0.4, "Capital Participation"),
-        "aegis-macro-v1": (0.3, "Macro Transmission"),
-        "aegis-risk-v1": (-0.2, "Volatility Regime Penalty"),
+        "aegis-csvd-v1": (csvd_factor, "C-SVD Information Discovery", "VALID"),
+        "aegis-exp-v1": (exp_factor, "Expectation Dislocation & Revision Breadth", "VALID"),
+        "aegis-fund-v1": (fund_factor, "Fundamental Inflection & Acceleration", fund_status),
+        "aegis-mkt-v1": (mkt_factor, "Market Repricing & Trend Persistence", "VALID"),
+        "aegis-val-v1": (val_factor, "Valuation Dislocation", val_status),
+        "aegis-vol-v1": (0.4, "Capital Participation", "VALID"),
+        "aegis-macro-v1": (0.3, "Macro Transmission", "VALID"),
+        "aegis-risk-v1": (-0.2, "Volatility Regime Penalty", "VALID"),
     }
 
     contributions: List[FactorLearnedContribution] = []
@@ -245,9 +284,28 @@ def evaluate_a3_adaptive_alpha(symbol: str, df: pd.DataFrame, csvd_score: float 
     csvd_exp = csvd_factor * exp_factor * 0.08
     csvd_mom = csvd_factor * mkt_factor * 0.05
 
-    for fid, (raw_score, name) in factors_raw.items():
+    for fid, (raw_score, name, status) in factors_raw.items():
+        if status == "NOT_APPLICABLE":
+            contributions.append(
+                FactorLearnedContribution(
+                    factor_id=fid,
+                    name=name,
+                    raw_score=0.0,
+                    learned_beta=0.0,
+                    nonlinear_adjustment=0.0,
+                    interaction_boost=0.0,
+                    net_contribution=0.0,
+                    direction="NEUTRAL",
+                )
+            )
+            continue
+
         beta = LEARNED_FACTOR_BETAS.get(fid, 0.1)
-        nonlinear = -math.copysign((abs(raw_score) - 2.0) * 0.05, raw_score) if abs(raw_score) > 2.0 else 0.0
+        nonlinear = (
+            -math.copysign((abs(raw_score) - 2.0) * 0.05, raw_score)
+            if abs(raw_score) > 2.0
+            else 0.0
+        )
         interaction = (csvd_exp + csvd_mom) if fid == "aegis-csvd-v1" else 0.0
         net = round(raw_score * beta + nonlinear + interaction, 4)
         total_net += net
@@ -270,7 +328,9 @@ def evaluate_a3_adaptive_alpha(symbol: str, df: pd.DataFrame, csvd_score: float 
     ci_lower = round(expected_return - 1.96 * uncertainty, 2)
     ci_upper = round(expected_return + 1.96 * uncertainty, 2)
 
-    action: A3SignalAction = "BUY" if calibrated_score >= 1.2 else "SELL" if calibrated_score <= -1.2 else "WATCH"
+    action: A3SignalAction = (
+        "BUY" if calibrated_score >= 1.2 else "SELL" if calibrated_score <= -1.2 else "WATCH"
+    )
 
     return A3SignalEvaluation(
         symbol=sym,
@@ -285,9 +345,16 @@ def evaluate_a3_adaptive_alpha(symbol: str, df: pd.DataFrame, csvd_score: float 
         factor_contributions=contributions,
         market_structure=mkt,
         disagreement_vector=disagreement,
-        quality_gates={"expected_edge_passed": True, "uncertainty_ratio_passed": True, "gate_summary": "5/5 Quality Gates Verified"},
+        quality_gates={
+            "expected_edge_passed": True,
+            "uncertainty_ratio_passed": True,
+            "gate_summary": "5/5 Quality Gates Verified",
+        },
         primary_driver="C-SVD Information Discovery",
-        supporting_evidence=["C-SVD Information Discovery corroborated by independent news", "Consensus analyst upgrades outpace downgrades"],
+        supporting_evidence=[
+            "C-SVD Information Discovery corroborated by independent news",
+            "Consensus analyst upgrades outpace downgrades",
+        ],
         contradicting_evidence=["Valuation multiple trading at elevated sector percentile"],
         market_incorporation_status="UNPRICED" if news_vs_price > 1.0 else "PARTIALLY_PRICED",
         oos_model_health="OPTIMAL",

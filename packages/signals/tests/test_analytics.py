@@ -98,3 +98,18 @@ def test_sentiment_extremes_are_not_clipped_unless_configured() -> None:
     )
     assert float(result.iloc[-1]) > 3.0
     assert float(clipped.iloc[-1]) == 3.0
+
+
+def test_evaluate_forward_outcomes() -> None:
+    preds = pd.Series([1.0, -1.0, 1.0, 1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0])
+    prices = pd.Series([100.0, 102.0, 99.0, 103.0, 101.0, 105.0, 102.0, 108.0, 107.0, 104.0])
+
+    res = analytics.evaluate_forward_outcomes(
+        preds, prices, horizons=[1, 3], transaction_cost_tiers_bps=[0.0, 10.0]
+    )
+    assert 1 in res
+    assert 3 in res
+    assert res[1]["information_coefficient"] is not None
+    cost_sens = res[1]["cost_sensitivity"]
+    assert isinstance(cost_sens, dict)
+    assert "10.0bps" in cost_sens

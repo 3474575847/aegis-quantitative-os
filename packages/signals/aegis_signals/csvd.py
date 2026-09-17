@@ -23,7 +23,7 @@ class CSVDConfig:
 class CSVDProcessor(BaseSignalProcessor):
     """
     Aegis Corroborated Sentiment & Velocity Divergence (C-SVD v1) Processor.
-    
+
     Computes Point-in-Time Corroboration-Weighted Sentiment (CWSI), Sentiment Acceleration
     & Velocity (SAV), and News-Price Divergence Oscillator (NPDO).
     """
@@ -69,7 +69,9 @@ class CSVDProcessor(BaseSignalProcessor):
         # 3. Price Return & Z-score
         price_ret = price.pct_change().fillna(0.0)
         ret_mean = price_ret.rolling(window=window, min_periods=1).mean().fillna(0.0)
-        ret_std = price_ret.rolling(window=window, min_periods=1).std().fillna(0.0001).replace(0, 0.0001)
+        ret_std = (
+            price_ret.rolling(window=window, min_periods=1).std().fillna(0.0001).replace(0, 0.0001)
+        )
         z_price = (price_ret - ret_mean) / ret_std
 
         # 4. Sentiment Z-score
@@ -79,7 +81,7 @@ class CSVDProcessor(BaseSignalProcessor):
         # 5. News-Price Divergence Oscillator (NPDO)
         npdo = z_sentiment - z_price
         threshold = float(params.get("divergence_threshold", self.config.divergence_threshold))
-        
+
         # Signal output: mapped into actionable range or raw npdo z-score
         if params.get("raw_npdo", False):
             return npdo.fillna(0.0)
