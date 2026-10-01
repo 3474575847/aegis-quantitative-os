@@ -408,19 +408,21 @@ export default function DrawingOverlayCanvas({
 
       if (showSignals) {
         for (const sig of signals) {
-          const t = Math.floor(Date.parse(sig.market_timestamp) / 1000);
+          const t = parseTimestampToSeconds(sig.market_timestamp);
+          if (t === null) continue;
           const sx = timeToX(t);
-          if (sx !== null && Math.abs(sx - x) < 14) {
+          if (sx !== null && Math.abs(sx - x) < 20) {
             isHit = true;
             hitCard = {
               x: sx,
               y: y - 10,
-              title: `AEGIS SIGNAL: ${sig.action}`,
+              title: `AEGIS MODEL SIGNAL: ${sig.action}`,
               items: [
-                { label: 'Score', value: sig.score != null ? formatSignedFigure(sig.score) : 'N/A' },
-                { label: 'Confidence', value: `${Math.round((sig.confidence ?? 0) * 100)}%` },
-                { label: 'Headline', value: sig.headline ?? sig.rationale },
-                { label: 'Timestamp', value: sig.market_timestamp },
+                { label: 'Action Trigger', value: `${sig.action} Recommendation` },
+                { label: 'Model Confidence', value: `${Math.round((sig.confidence ?? 0) * 100)}%` },
+                { label: 'Z-Score Signal', value: sig.score != null ? formatSignedFigure(sig.score) : 'N/A' },
+                { label: 'Execution Rule', value: 'Order fills on candle close / next open' },
+                { label: 'Trigger Time', value: sig.market_timestamp },
               ],
             };
             break;
@@ -915,31 +917,72 @@ function renderInProgressPreview(
   ctx.setLineDash([]);
 }
 
+function parseTimestampToSeconds(ts: string | number | undefined): number | null {
+  if (ts == null) return null;
+  if (typeof ts === 'number') {
+    return ts > 1e11 ? Math.floor(ts / 1000) : Math.floor(ts);
+  }
+  const num = Number(ts);
+  if (!isNaN(num)) {
+    return num > 1e11 ? Math.floor(num / 1000) : Math.floor(num);
+  }
+  const parsed = Date.parse(ts);
+  if (!isNaN(parsed)) {
+    return Math.floor(parsed / 1000);
+  }
+  return null;
+}
+
 function renderSignalMarker(
   ctx: CanvasRenderingContext2D,
   sig: AegisSignalOverlay,
   timeToX: (t: number) => number | null,
   priceToY: (p: number) => number | null
 ) {
-  const t = Math.floor(Date.parse(sig.market_timestamp) / 1000);
+  const t = parseTimestampToSeconds(sig.market_timestamp);
+  if (t === null) return;
   const x = timeToX(t);
   if (x === null) return;
 
-  const y = 30; // Render signal tags near top pane
-  const color = sig.action === 'BUY' ? '#10b981' : '#f43f5e';
+  const y = 28;
+  const isBuy = sig.action === 'BUY';
+  const color = isBuy ? '#10b981' : '#f43f5e';
 
-  ctx.fillStyle = color;
+  ctx.save();
+  // Draw glow & pill badge
+  ctx.fillStyle = isBuy ? 'rgba(16, 185, 129, 0.25)' : 'rgba(244, 63, 94, 0.25)';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  if (sig.action === 'BUY') {
-    ctx.moveTo(x, y);
-    ctx.lineTo(x - 6, y + 10);
-    ctx.lineTo(x + 6, y + 10);
+  if (ctx.roundRect) {
+    ctx.roundRect(x - 18, y - 10, 36, 18, 4);
   } else {
-    ctx.moveTo(x, y + 10);
-    ctx.lineTo(x - 6, y);
-    ctx.lineTo(x + 6, y);
+    ctx.rect(x - 18, y - 10, 36, 18);
   }
   ctx.fill();
+  ctx.stroke();
+
+  // Draw arrow triangle pointing down toward candle
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  if (isBuy) {
+    ctx.moveTo(x, y + 14);
+    ctx.lineTo(x - 5, y + 8);
+    ctx.lineTo(x + 5, y + 8);
+  } else {
+    ctx.moveTo(x, y + 8);
+    ctx.lineTo(x - 5, y + 14);
+    ctx.lineTo(x + 5, y + 14);
+  }
+  ctx.fill();
+
+  // Text label
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 9px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(sig.action, x, y - 1);
+  ctx.restore();
 }
 
 function renderEventMarker(

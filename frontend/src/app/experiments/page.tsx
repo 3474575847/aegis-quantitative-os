@@ -281,36 +281,32 @@ export default function ExperimentsPage() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div className="flex flex-col gap-4 pb-10">
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-[#1b2230]">
         <div>
-          <h1 style={{ fontSize: '22px', fontWeight: '700', letterSpacing: '-0.5px' }}>
-            Research Experiment Registry & Comparison
-          </h1>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
-            Version-controlled hypothesis repository, deterministic run history, and institutional
-            multi-factor comparison.
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-[1px] bg-[#d29922]" />
+            <h1 className="text-base font-bold tracking-tight text-[#e6edf3] font-mono">
+              Experiment Registry
+            </h1>
+          </div>
+          <p className="text-xs text-[#8b949e] mt-1 font-mono">
+            Version-controlled hypothesis repository, deterministic run history & institutional factor comparison
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div className="flex items-center gap-2">
           {selectedForCompare.length >= 2 && (
             <button
-              className="btn btn-secondary"
+              className="terminal-btn text-xs text-[#58a6ff] border-[#58a6ff]/40"
               onClick={handleOpenCompare}
-              style={{
-                fontSize: '12px',
-                borderColor: 'var(--accent-cyan)',
-                color: 'var(--accent-cyan)',
-              }}
             >
               Compare Selected ({selectedForCompare.length}) →
             </button>
           )}
           <button
-            className="btn btn-primary"
+            className="terminal-btn primary text-xs"
             onClick={() => setShowCreateModal(true)}
-            style={{ fontSize: '12px' }}
           >
             + New Experiment
           </button>
@@ -318,175 +314,160 @@ export default function ExperimentsPage() {
       </div>
 
       {/* Metrics Row */}
-      <div className="grid-4">
-        <div className="card">
-          <span className="card-title">Total Experiments</span>
-          <span className="card-value">{experiments.length}</span>
-          <span className="card-subtitle">Versioned configurations</span>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px] flex flex-col justify-between">
+          <span className="metric-label">Total Experiments</span>
+          <span className="text-xl font-bold font-mono text-[#e6edf3] tabular-nums mt-1">{experiments.length}</span>
+          <span className="text-[11px] text-[#586069] font-mono mt-1">Versioned configurations</span>
         </div>
-        <div className="card">
-          <span className="card-title">Executed Runs</span>
-          <span className="card-value">
+        <div className="bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px] flex flex-col justify-between">
+          <span className="metric-label">Executed Runs</span>
+          <span className="text-xl font-bold font-mono text-[#e6edf3] tabular-nums mt-1">
             {experiments.reduce((acc, curr) => acc + curr.run_count, 0)}
           </span>
-          <span className="card-subtitle">Point-in-time audit ledger</span>
+          <span className="text-[11px] text-[#586069] font-mono mt-1">Point-in-time audit ledger</span>
         </div>
-        <div className="card">
-          <span className="card-title">Best Strategy Sharpe</span>
-          <span className="card-value" style={{ color: 'var(--accent-green)', fontSize: '24px' }}>
+        <div className="bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px] flex flex-col justify-between">
+          <span className="metric-label">Best Strategy Sharpe</span>
+          <span className="text-xl font-bold font-mono text-[#3fb950] tabular-nums mt-1">
             {formatFigure(Math.max(...experiments.map((e) => e.best_sharpe || 0), 0))}
           </span>
-          <span className="card-subtitle">Highest risk-adjusted alpha</span>
+          <span className="text-[11px] text-[#586069] font-mono mt-1">Highest risk-adjusted alpha</span>
         </div>
-        <div className="card">
-          <span className="card-title">Execution Mode</span>
-          <span className="card-value" style={{ color: 'var(--accent-cyan)', fontSize: '20px' }}>
-            NEXT-BAR CLOSE
+        <div className="bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px] flex flex-col justify-between">
+          <span className="metric-label">Execution Mode</span>
+          <span className="text-xl font-bold font-mono text-[#58a6ff] mt-1">
+            Next-Bar Close
           </span>
-          <span className="card-subtitle">Zero lookahead bias</span>
+          <span className="text-[11px] text-[#3fb950] font-mono mt-1">Zero lookahead bias</span>
         </div>
       </div>
 
       {/* Main Explorer */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1.3fr', gap: '24px' }}>
-        {/* Experiment List Table */}
-        <div className="table-container">
-          <div className="table-header">
-            <span style={{ fontWeight: '600', fontSize: '13px' }}>Experiment Definitions</span>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-              {selectedForCompare.length} selected for comparison
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
+        {/* Left Column: Experiment Definitions Table */}
+        <div className="lg:col-span-5 panel overflow-hidden">
+          <div className="panel-header">
+            <span className="panel-title">Experiment Definitions</span>
+            <span className="text-xs font-mono text-[#8b949e]">
+              {selectedForCompare.length} selected
             </span>
           </div>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th style={{ width: '30px' }}>Comp</th>
-                <th>Experiment</th>
-                <th>Symbol</th>
-                <th>Runs</th>
-                <th>Best Sharpe</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
+          <div className="overflow-x-auto max-h-[660px]">
+            <table className="terminal-table">
+              <thead>
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '30px' }}>
-                    Loading experiments...
-                  </td>
+                  <th style={{ width: '28px' }}></th>
+                  <th>Experiment</th>
+                  <th>Symbol</th>
+                  <th>Runs</th>
+                  <th>Sharpe</th>
+                  <th>Status</th>
                 </tr>
-              ) : experiments.length === 0 ? (
-                <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '30px' }}>
-                    No experiments found. Create one to begin.
-                  </td>
-                </tr>
-              ) : (
-                experiments.map((exp) => {
-                  const isSelected = selectedExp?.experiment_id === exp.experiment_id;
-                  const isChecked = selectedForCompare.includes(exp.experiment_id);
-                  return (
-                    <tr
-                      key={exp.experiment_id}
-                      onClick={() => selectExperiment(exp)}
-                      style={{
-                        cursor: 'pointer',
-                        backgroundColor: isSelected ? 'var(--bg-card-hover)' : undefined,
-                      }}
-                    >
-                      <td onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => {}}
-                          onClick={(e) => toggleCompareSelect(exp.experiment_id, e)}
-                        />
-                      </td>
-                      <td>
-                        <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
-                          {exp.name}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: '11px',
-                            color: 'var(--text-muted)',
-                            maxWidth: '180px',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {exp.description || 'No description'}
-                        </div>
-                      </td>
-                      <td>
-                        <span className="badge badge-cyan font-mono" style={{ fontSize: '10px' }}>
-                          {exp.symbol}
-                        </span>
-                      </td>
-                      <td>
-                        <span className="font-mono">{exp.run_count}</span>
-                      </td>
-                      <td>
-                        <span
-                          className="font-mono"
-                          style={{
-                            fontWeight: '600',
-                            color:
-                              exp.best_sharpe != null && exp.best_sharpe >= 1.0
-                                ? 'var(--accent-green)'
-                                : exp.best_sharpe != null && exp.best_sharpe >= 0
-                                  ? 'var(--accent-cyan)'
-                                  : 'var(--text-muted)',
-                          }}
-                        >
-                          {exp.best_sharpe != null ? formatFigure(exp.best_sharpe) : '—'}
-                        </span>
-                      </td>
-                      <td>
-                        <span
-                          className={`badge ${
-                            exp.latest_status === 'COMPLETED'
-                              ? 'badge-green'
-                              : exp.latest_status === 'RUNNING'
-                                ? 'badge-cyan'
-                                : 'badge-amber'
-                          } font-mono`}
-                          style={{ fontSize: '10px' }}
-                        >
-                          {exp.latest_status}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-10 text-[#8b949e] text-xs font-mono">
+                      Loading experiments…
+                    </td>
+                  </tr>
+                ) : experiments.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-12 text-[#8b949e] text-xs font-mono">
+                      No experiments found. Create one to begin.
+                    </td>
+                  </tr>
+                ) : (
+                  experiments.map((exp) => {
+                    const isSelected = selectedExp?.experiment_id === exp.experiment_id;
+                    const isChecked = selectedForCompare.includes(exp.experiment_id);
+                    return (
+                      <tr
+                        key={exp.experiment_id}
+                        onClick={() => selectExperiment(exp)}
+                        className={`cursor-pointer transition-colors ${
+                          isSelected ? 'bg-[#192231]/80' : 'hover:bg-[#121722]'
+                        }`}
+                      >
+                        <td onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {}}
+                            onClick={(e) => toggleCompareSelect(exp.experiment_id, e)}
+                            className="rounded-[2px] accent-[#d29922]"
+                          />
+                        </td>
+                        <td>
+                          <div className={`font-mono text-xs font-semibold ${isSelected ? 'text-[#58a6ff]' : 'text-[#e6edf3]'}`}>
+                            {exp.name}
+                          </div>
+                          <div className="text-[10px] text-[#586069] truncate max-w-[150px] mt-0.5">
+                            {exp.description || 'No description'}
+                          </div>
+                        </td>
+                        <td>
+                          <span className="px-1.5 py-0.5 rounded-[2px] bg-[#14233a] border border-[#1f3a60] text-[10px] text-[#58a6ff] font-mono">
+                            {exp.symbol}
+                          </span>
+                        </td>
+                        <td>
+                          <span className="font-mono text-xs text-[#e6edf3]">{exp.run_count}</span>
+                        </td>
+                        <td>
+                          <span
+                            className="font-mono text-xs font-semibold tabular-nums"
+                            style={{
+                              color:
+                                exp.best_sharpe != null && exp.best_sharpe >= 1.0
+                                  ? '#3fb950'
+                                  : exp.best_sharpe != null && exp.best_sharpe >= 0
+                                    ? '#58a6ff'
+                                    : '#8b949e',
+                            }}
+                          >
+                            {exp.best_sharpe != null ? formatFigure(exp.best_sharpe) : '—'}
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            className={`px-1.5 py-0.5 rounded-[2px] font-mono text-[10px] uppercase ${
+                              exp.latest_status === 'COMPLETED'
+                                ? 'bg-[#12281e] text-[#3fb950] border border-[#235537]'
+                                : exp.latest_status === 'RUNNING'
+                                  ? 'bg-[#14233a] text-[#58a6ff] border border-[#1f3a60]'
+                                  : 'bg-[#2b2111] text-[#d29922] border border-[#594217]'
+                            }`}
+                          >
+                            {exp.latest_status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
-        {/* Experiment Detail, Action Controls & Run History */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {/* Right Column: Experiment Detail, Action Controls & Run History */}
+        <div className="lg:col-span-7 flex flex-col gap-3.5">
           {selectedExp ? (
             <>
               {/* Definition Overview & Action Toolbar */}
-              <div className="card">
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                  }}
-                >
+              <div className="panel p-4 flex flex-col gap-3">
+                <div className="flex justify-between items-start gap-3 pb-2 border-b border-[#1b2230]">
                   <div>
-                    <h2 style={{ fontSize: '17px', fontWeight: '700' }}>{selectedExp.name}</h2>
-                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                    <h2 className="text-sm font-bold text-[#e6edf3] font-mono">{selectedExp.name}</h2>
+                    <p className="text-xs text-[#8b949e] mt-1">
                       {selectedExp.description || 'No description provided.'}
                     </p>
                   </div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
+                  <div className="flex items-center gap-2">
                     <button
-                      className="btn btn-secondary"
+                      className="terminal-btn text-xs"
                       onClick={() => {
                         setCloneName(`${selectedExp.name} (Clone)`);
                         setCloneSymbol(selectedExp.symbol);
@@ -494,58 +475,44 @@ export default function ExperimentsPage() {
                         setCloneSlippage(String(selectedExp.slippage_bps));
                         setShowCloneModal(true);
                       }}
-                      style={{ fontSize: '11px', padding: '4px 8px' }}
                     >
                       Clone
                     </button>
                     <button
-                      className="btn btn-primary"
+                      className="terminal-btn primary text-xs"
                       onClick={() => handleRunExperiment(selectedExp.experiment_id)}
                       disabled={actionLoading}
-                      style={{ fontSize: '11px', padding: '4px 10px' }}
                     >
-                      {actionLoading ? 'Executing...' : '▶ Run Backtest'}
+                      {actionLoading ? 'Executing…' : '▶ Run Backtest'}
                     </button>
                   </div>
                 </div>
 
                 {actionMessage && (
-                  <div style={{ marginTop: '10px', fontSize: '11px', color: 'var(--accent-cyan)' }}>
+                  <div className="p-2 bg-[#12281e] border border-[#235537] text-[#3fb950] text-xs font-mono rounded-[2px]">
                     {actionMessage}
                   </div>
                 )}
 
-                {/* Hyperparameters Lineage Card */}
-                <div
-                  className="font-mono"
-                  style={{
-                    marginTop: '12px',
-                    padding: '10px',
-                    backgroundColor: 'var(--bg-secondary)',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: '8px',
-                  }}
-                >
+                {/* Hyperparameters Lineage Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs font-mono bg-[#10141d] p-3 rounded-[2px] border border-[#1b2230]">
                   <div>
-                    <span style={{ color: 'var(--text-muted)' }}>Symbol: </span>
-                    <strong>{selectedExp.symbol}</strong>
+                    <span className="text-[10px] text-[#586069] uppercase block">Symbol</span>
+                    <span className="text-[#58a6ff] font-bold mt-0.5 block">{selectedExp.symbol}</span>
                   </div>
                   <div>
-                    <span style={{ color: 'var(--text-muted)' }}>Costs: </span>
-                    <strong>{selectedExp.transaction_cost_bps} bps</strong>
+                    <span className="text-[10px] text-[#586069] uppercase block">Cost Sensitivity</span>
+                    <span className="text-[#e6edf3] mt-0.5 block">{selectedExp.transaction_cost_bps} bps</span>
                   </div>
                   <div>
-                    <span style={{ color: 'var(--text-muted)' }}>Slippage: </span>
-                    <strong>{selectedExp.slippage_bps} bps</strong>
+                    <span className="text-[10px] text-[#586069] uppercase block">Slippage Model</span>
+                    <span className="text-[#e6edf3] mt-0.5 block">{selectedExp.slippage_bps} bps</span>
                   </div>
                   <div>
-                    <span style={{ color: 'var(--text-muted)' }}>Signal ID: </span>
-                    <strong style={{ color: 'var(--accent-cyan)' }}>
-                      {selectedExp.signal_id ? selectedExp.signal_id.slice(0, 8) + '...' : 'None'}
-                    </strong>
+                    <span className="text-[10px] text-[#586069] uppercase block">Signal ID</span>
+                    <span className="text-[#d29922] mt-0.5 block truncate">
+                      {selectedExp.signal_id ? selectedExp.signal_id.slice(0, 10) + '…' : 'Manual'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -553,42 +520,36 @@ export default function ExperimentsPage() {
               {/* Selected Run Inspection & Equity Curve */}
               {selectedRun && selectedRun.result && (
                 <>
-                  <div className="grid-4">
-                    <div className="card">
-                      <span className="card-title">Run Sharpe</span>
-                      <strong
-                        className="card-value"
-                        style={{ color: 'var(--accent-green)', fontSize: '18px' }}
-                      >
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="bg-[#10141d] border border-[#1b2230] p-3 rounded-[2px] flex flex-col justify-between">
+                      <span className="metric-label">Run Sharpe</span>
+                      <span className="text-lg font-bold font-mono text-[#3fb950] tabular-nums mt-1">
                         {selectedRun.result.sharpe != null ? formatFigure(selectedRun.result.sharpe) : '—'}
-                      </strong>
+                      </span>
                     </div>
-                    <div className="card">
-                      <span className="card-title">Total Return</span>
-                      <strong className="card-value" style={{ fontSize: '18px' }}>
+                    <div className="bg-[#10141d] border border-[#1b2230] p-3 rounded-[2px] flex flex-col justify-between">
+                      <span className="metric-label">Total Return</span>
+                      <span className="text-lg font-bold font-mono text-[#e6edf3] tabular-nums mt-1">
                         {selectedRun.result.total_return !== undefined
                           ? formatPercent(selectedRun.result.total_return)
                           : '—'}
-                      </strong>
+                      </span>
                     </div>
-                    <div className="card">
-                      <span className="card-title">Max Drawdown</span>
-                      <strong
-                        className="card-value"
-                        style={{ color: 'var(--accent-red)', fontSize: '18px' }}
-                      >
+                    <div className="bg-[#10141d] border border-[#1b2230] p-3 rounded-[2px] flex flex-col justify-between">
+                      <span className="metric-label">Max Drawdown</span>
+                      <span className="text-lg font-bold font-mono text-[#f85149] tabular-nums mt-1">
                         {selectedRun.result.max_drawdown !== undefined
                           ? formatPercent(selectedRun.result.max_drawdown)
                           : '—'}
-                      </strong>
+                      </span>
                     </div>
-                    <div className="card">
-                      <span className="card-title">Win Rate</span>
-                      <strong className="card-value" style={{ fontSize: '18px' }}>
+                    <div className="bg-[#10141d] border border-[#1b2230] p-3 rounded-[2px] flex flex-col justify-between">
+                      <span className="metric-label">Win Rate</span>
+                      <span className="text-lg font-bold font-mono text-[#58a6ff] tabular-nums mt-1">
                         {selectedRun.result.win_rate !== undefined
                           ? formatPercent(selectedRun.result.win_rate)
                           : '—'}
-                      </strong>
+                      </span>
                     </div>
                   </div>
 
@@ -603,107 +564,102 @@ export default function ExperimentsPage() {
               )}
 
               {/* Execution Run History Table */}
-              <div className="table-container">
-                <div className="table-header">
-                  <span style={{ fontWeight: '600', fontSize: '13px' }}>
-                    Execution Audit History
-                  </span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              <div className="panel overflow-hidden">
+                <div className="panel-header">
+                  <span className="panel-title">Execution Audit History</span>
+                  <span className="text-xs font-mono text-[#8b949e]">
                     {runs.length} runs
                   </span>
                 </div>
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Run ID</th>
-                      <th>Status</th>
-                      <th>Executed At</th>
-                      <th>Sharpe</th>
-                      <th>CAGR</th>
-                      <th>Drawdown</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {runs.length === 0 ? (
+                <div className="overflow-x-auto max-h-[300px]">
+                  <table className="terminal-table">
+                    <thead>
                       <tr>
-                        <td colSpan={6} style={{ textAlign: 'center', padding: '20px' }}>
-                          No runs recorded. Click &quot;Run Backtest&quot; above to execute.
-                        </td>
+                        <th>Run ID</th>
+                        <th>Status</th>
+                        <th>Executed At</th>
+                        <th>Sharpe</th>
+                        <th>CAGR</th>
+                        <th>Drawdown</th>
                       </tr>
-                    ) : (
-                      runs.map((r) => {
-                        const isCurrentRun = selectedRun?.run_id === r.run_id;
-                        return (
-                          <tr
-                            key={r.run_id}
-                            onClick={() => setSelectedRun(r)}
-                            style={{
-                              cursor: 'pointer',
-                              backgroundColor: isCurrentRun ? 'var(--bg-card-hover)' : undefined,
-                            }}
-                          >
-                            <td>
-                              <span className="font-mono" style={{ fontSize: '11px' }}>
-                                {r.run_id.slice(0, 8)}...
-                              </span>
-                            </td>
-                            <td>
-                              <span
-                                className={`badge ${
-                                  r.status === 'COMPLETED' ? 'badge-green' : 'badge-amber'
-                                } font-mono`}
-                                style={{ fontSize: '10px' }}
-                              >
-                                {r.status}
-                              </span>
-                            </td>
-                            <td style={{ fontSize: '11px' }}>
-                              {new Date(r.started_at).toLocaleString([], {
-                                month: 'short',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              })}
-                            </td>
-                            <td>
-                              <span className="font-mono" style={{ fontSize: '11px' }}>
-                                {r.result?.sharpe !== undefined ? formatFigure(r.result.sharpe) : '—'}
-                              </span>
-                            </td>
-                            <td>
-                              <span className="font-mono" style={{ fontSize: '11px' }}>
-                                {r.result?.cagr !== undefined
-                                  ? formatPercent(r.result.cagr)
-                                  : '—'}
-                              </span>
-                            </td>
-                            <td>
-                              <span
-                                className="font-mono"
-                                style={{
-                                  fontSize: '11px',
-                                  color: r.result?.max_drawdown ? 'var(--accent-red)' : 'inherit',
-                                }}
-                              >
-                                {r.result?.max_drawdown !== undefined
-                                  ? formatPercent(r.result.max_drawdown)
-                                  : '—'}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {runs.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="text-center py-6 text-xs text-[#586069] font-mono">
+                            No runs recorded. Click &quot;▶ Run Backtest&quot; above to execute.
+                          </td>
+                        </tr>
+                      ) : (
+                        runs.map((r) => {
+                          const isCurrentRun = selectedRun?.run_id === r.run_id;
+                          return (
+                            <tr
+                              key={r.run_id}
+                              onClick={() => setSelectedRun(r)}
+                              className={`cursor-pointer transition-colors ${
+                                isCurrentRun ? 'bg-[#192231]/80' : 'hover:bg-[#121722]'
+                              }`}
+                            >
+                              <td>
+                                <span className="font-mono text-xs text-[#58a6ff]">
+                                  {r.run_id.slice(0, 8)}…
+                                </span>
+                              </td>
+                              <td>
+                                <span
+                                  className={`px-1.5 py-0.5 rounded-[2px] font-mono text-[10px] uppercase ${
+                                    r.status === 'COMPLETED'
+                                      ? 'bg-[#12281e] text-[#3fb950] border border-[#235537]'
+                                      : 'bg-[#2b2111] text-[#d29922] border border-[#594217]'
+                                  }`}
+                                >
+                                  {r.status}
+                                </span>
+                              </td>
+                              <td className="text-xs text-[#8b949e] font-mono">
+                                {new Date(r.started_at).toLocaleString([], {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </td>
+                              <td>
+                                <span className="font-mono text-xs text-[#3fb950] tabular-nums">
+                                  {r.result?.sharpe !== undefined ? formatFigure(r.result.sharpe) : '—'}
+                                </span>
+                              </td>
+                              <td>
+                                <span className="font-mono text-xs text-[#e6edf3] tabular-nums">
+                                  {r.result?.cagr !== undefined
+                                    ? formatPercent(r.result.cagr)
+                                    : '—'}
+                                </span>
+                              </td>
+                              <td>
+                                <span
+                                  className={`font-mono text-xs tabular-nums ${
+                                    r.result?.max_drawdown ? 'text-[#f85149]' : 'text-[#8b949e]'
+                                  }`}
+                                >
+                                  {r.result?.max_drawdown !== undefined
+                                    ? formatPercent(r.result.max_drawdown)
+                                    : '—'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </>
           ) : (
-            <div className="card" style={{ textAlign: 'center', padding: '60px 20px' }}>
-              <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
-                Select an experiment definition from the left panel to inspect runs and equity
-                metrics.
-              </span>
+            <div className="panel p-16 text-center text-xs text-[#586069] font-mono">
+              Select an experiment definition from the left panel to inspect runs and equity metrics.
             </div>
           )}
         </div>

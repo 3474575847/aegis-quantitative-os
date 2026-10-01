@@ -14,6 +14,24 @@ export interface FactorDefinition {
   research_status: 'CORE_PROMOTED' | 'PROMOTED' | 'EXPERIMENTAL';
 }
 
+export type AssetClass = 'EQUITY' | 'CRYPTO' | 'COMMODITY' | 'FX';
+
+export function getAssetClass(symbol: string): AssetClass {
+  const sym = symbol.toUpperCase().trim().replace('-USD', '').replace('USDT', '');
+  if (['BTC', 'ETH', 'SOL', 'DOGE', 'ADA', 'XRP', 'AVAX', 'DOT', 'LINK', 'BNB'].includes(sym)) {
+    return 'CRYPTO';
+  }
+  if (['GLD', 'SLV', 'USO', 'UNG', 'CL', 'GC'].includes(sym)) {
+    return 'COMMODITY';
+  }
+  if (['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD'].includes(sym)) {
+    return 'FX';
+  }
+  return 'EQUITY';
+}
+
+export type FactorStatus = 'ACTIVE' | 'NOT_APPLICABLE' | 'MISSING_DATA';
+
 export interface FactorObservation {
   time: number;
   timestamp: string;
@@ -23,6 +41,9 @@ export interface FactorObservation {
   direction: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
   confidence: number;
   attribution: string;
+  status: FactorStatus;
+  is_causal: boolean;
+  influence_path: string;
 }
 
 export interface FactorMatrixSnapshot {
@@ -152,6 +173,7 @@ export function computeAssetFactorMatrix(
   fundamentalMetrics?: { epsGrowth3Y?: number; roeTTM?: number; peNormalizedAnnual?: number }
 ): FactorMatrixSnapshot {
   const sym = symbol.toUpperCase().trim();
+  const assetClass = getAssetClass(sym);
   const sortedCandles = [...candles].sort((a, b) => a.time - b.time);
   const latestCandle = sortedCandles[sortedCandles.length - 1] || { time: Math.floor(Date.now() / 1000), close: 100 };
   const latestTime = latestCandle.time;
@@ -171,23 +193,78 @@ export function computeAssetFactorMatrix(
   const csvdDirection = csvdValue > 0.5 ? 'BULLISH' : csvdValue < -0.5 ? 'BEARISH' : 'NEUTRAL';
 
   // 2. Fundamental Inflection Factor
-  const epsGrowth = fundamentalMetrics?.epsGrowth3Y ?? 14.5;
-  const roe = fundamentalMetrics?.roeTTM ?? 28.0;
-  const fundScore = Number(((epsGrowth - 10.0) / 15.0 + (roe - 20.0) / 20.0).toFixed(4));
-  const fundValue = Math.max(-2.5, Math.min(2.5, fundScore));
-  const fundDirection = fundValue > 0.4 ? 'BULLISH' : fundValue < -0.4 ? 'BEARISH' : 'NEUTRAL';
+  let fundStatus: FactorStatus = 'ACTIVE';
+  let fundValue = 0.0;
+  let fundRaw = 0.0;
+  let fundDirection: 'BULLISH' | 'BEARISH' | 'NEUTRAL' = 'NEUTRAL';
+  let fundAttribution = '';
+
+  if (assetClass === 'CRYPTO') {
+    fundStatus = 'NOT_APPLICABLE';
+    fundAttribution = 'NOT_APPLICABLE: Digital assets do not report corporate earnings or ROE.';
+  } else {
+    if (fundamentalMetrics?.epsGrowth3Y != null && fundamentalMetrics?.roeTTM != null) {
+      fundStatus = 'ACTIVE';
+      const epsGrowth = fundamentalMetrics.epsGrowth3Y;
+      const roe = fundamentalMetrics.roeTTM;
+      fundRaw = Number(((epsGrowth - 10.0) / 15.0 + (roe - 20.0) / 20.0).toFixed(4));
+      fundValue = Math.max(-2.5, Math.min(2.5, fundRaw));
+      fundDirection = fundValue > 0.4 ? 'BULLISH' : fundValue < -0.4 ? 'BEARISH' : 'NEUTRAL';
+      fundAttribution = `3Y EPS Growth: ${epsGrowth}%, ROE: ${roe}%`;
+    } else {
+      fundStatus = 'MISSING_DATA';
+      fundAttribution = 'MISSING_DATA: No verified SEC financial statement filings available.';
+    }
+  }
 
   // 3. Expectation Dislocation Factor
-  // Simulated from news polarity & earnings drift
-  const expScore = Number((latestCsvd.cwsi * 1.5 + (latestCandle.close > (sortedCandles[0]?.close ?? 0) ? 0.3 : -0.3)).toFixed(4));
-  const expValue = Math.max(-2.5, Math.min(2.5, expScore));
-  const expDirection = expValue > 0.4 ? 'BULLISH' : expValue < -0.4 ? 'BEARISH' : 'NEUTRAL';
+  let expStatus: FactorStatus = 'ACTIVE';
+  let expValue = 0.0;
+  let expRaw = 0.0;
+  let expDirection: 'BULLISH' | 'BEARISH' | 'NEUTRAL' = 'NEUTRAL';
+  let expAttribution = '';
+
+  if (assetClass === 'CRYPTO') {
+    expStatus = 'NOT_APPLICABLE';
+    expAttribution = 'NOT_APPLICABLE: Sell-side equity earnings revisions do not exist for crypto protocols.';
+  } else {
+    if ((fundamentalMetrics as any)?.analystRevisionBreadth != null) {
+      expStatus = 'ACTIVE';
+      const rev = Number((fundamentalMetrics as any).analystRevisionBreadth);
+      expRaw = Number(rev.toFixed(4));
+      expValue = Math.max(-2.5, Math.min(2.5, expRaw * 2.0));
+      expDirection = expValue > 0.3 ? 'BULLISH' : expValue < -0.3 ? 'BEARISH' : 'NEUTRAL';
+      expAttribution = `Analyst revision breadth: ${rev}`;
+    } else {
+      expStatus = 'MISSING_DATA';
+      expAttribution = 'MISSING_DATA: Real-time sell-side consensus revision feed unverified.';
+    }
+  }
 
   // 4. Valuation Dislocation Factor
-  const pe = fundamentalMetrics?.peNormalizedAnnual ?? 28.4;
-  const pegSpread = Number(((roe / (pe + 0.1)) - 1.0).toFixed(4));
-  const valValue = Math.max(-2.5, Math.min(2.5, pegSpread * 2.0));
-  const valDirection = valValue > 0.3 ? 'BULLISH' : valValue < -0.3 ? 'BEARISH' : 'NEUTRAL';
+  let valStatus: FactorStatus = 'ACTIVE';
+  let valValue = 0.0;
+  let valRaw = 0.0;
+  let valDirection: 'BULLISH' | 'BEARISH' | 'NEUTRAL' = 'NEUTRAL';
+  let valAttribution = '';
+
+  if (assetClass === 'CRYPTO') {
+    valStatus = 'NOT_APPLICABLE';
+    valAttribution = 'NOT_APPLICABLE: P/E multiples not applicable to decentralized tokens without corporate earnings.';
+  } else {
+    if (fundamentalMetrics?.peNormalizedAnnual != null && fundamentalMetrics?.roeTTM != null) {
+      valStatus = 'ACTIVE';
+      const pe = fundamentalMetrics.peNormalizedAnnual;
+      const roe = fundamentalMetrics.roeTTM;
+      valRaw = Number(((roe / (pe + 0.1)) - 1.0).toFixed(4));
+      valValue = Math.max(-2.5, Math.min(2.5, valRaw * 2.0));
+      valDirection = valValue > 0.3 ? 'BULLISH' : valValue < -0.3 ? 'BEARISH' : 'NEUTRAL';
+      valAttribution = `P/E: ${pe} vs ROE ${roe}% efficiency spread`;
+    } else {
+      valStatus = 'MISSING_DATA';
+      valAttribution = 'MISSING_DATA: Normalized P/E multiple unverified for asset.';
+    }
+  }
 
   // 5. Market Repricing Factor (Price Momentum / Trend)
   let mktScore = 0.0;
@@ -240,36 +317,48 @@ export function computeAssetFactorMatrix(
       direction: csvdDirection,
       confidence: latestCsvd.corroboration_score,
       attribution: `C-SVD Divergence State: ${latestCsvd.divergence_state} (CWSI: ${latestCsvd.cwsi}, Velocity: ${latestCsvd.sav})`,
+      status: 'ACTIVE',
+      is_causal: false,
+      influence_path: 'CORROBORATION_GATE (Active on news anomaly)',
     },
     'aegis-fund-v1': {
       time: latestTime,
       timestamp: latestTimestamp,
       factor_id: 'aegis-fund-v1',
       value: Number(fundValue.toFixed(4)),
-      raw_value: fundScore,
+      raw_value: fundRaw,
       direction: fundDirection,
-      confidence: 0.85,
-      attribution: `3Y EPS Growth: ${epsGrowth}%, ROE: ${roe}%`,
+      confidence: fundStatus === 'ACTIVE' ? 0.85 : 0.0,
+      attribution: fundAttribution,
+      status: fundStatus,
+      is_causal: false,
+      influence_path: fundStatus === 'ACTIVE' ? 'DIAGNOSTIC_ONLY (Unallocated)' : 'NOT_APPLICABLE',
     },
     'aegis-exp-v1': {
       time: latestTime,
       timestamp: latestTimestamp,
       factor_id: 'aegis-exp-v1',
       value: Number(expValue.toFixed(4)),
-      raw_value: expScore,
+      raw_value: expRaw,
       direction: expDirection,
-      confidence: 0.78,
-      attribution: `Analyst revision breadth and sentiment revision divergence`,
+      confidence: expStatus === 'ACTIVE' ? 0.78 : 0.0,
+      attribution: expAttribution,
+      status: expStatus,
+      is_causal: false,
+      influence_path: expStatus === 'ACTIVE' ? 'DIAGNOSTIC_ONLY (Unallocated)' : 'NOT_APPLICABLE',
     },
     'aegis-val-v1': {
       time: latestTime,
       timestamp: latestTimestamp,
       factor_id: 'aegis-val-v1',
       value: Number(valValue.toFixed(4)),
-      raw_value: pegSpread,
+      raw_value: valRaw,
       direction: valDirection,
-      confidence: 0.8,
-      attribution: `P/E: ${pe} vs ROE ${roe}% efficiency spread`,
+      confidence: valStatus === 'ACTIVE' ? 0.8 : 0.0,
+      attribution: valAttribution,
+      status: valStatus,
+      is_causal: false,
+      influence_path: valStatus === 'ACTIVE' ? 'DIAGNOSTIC_ONLY (Unallocated)' : 'NOT_APPLICABLE',
     },
     'aegis-mkt-v1': {
       time: latestTime,
@@ -280,6 +369,9 @@ export function computeAssetFactorMatrix(
       direction: mktDirection,
       confidence: 0.88,
       attribution: `20-bar trend distance: ${(mktScore * 100).toFixed(2)}%`,
+      status: 'ACTIVE',
+      is_causal: true,
+      influence_path: 'ALLOCATOR_RIDGE_FEATURE + REGIME_FILTER',
     },
     'aegis-vol-v1': {
       time: latestTime,
@@ -290,6 +382,9 @@ export function computeAssetFactorMatrix(
       direction: volDirection,
       confidence: 0.82,
       attribution: `20-bar volume surprise z-score: ${volValue.toFixed(2)}`,
+      status: 'ACTIVE',
+      is_causal: false,
+      influence_path: 'DIAGNOSTIC_ONLY',
     },
     'aegis-macro-v1': {
       time: latestTime,
@@ -300,6 +395,9 @@ export function computeAssetFactorMatrix(
       direction: macroDirection,
       confidence: 0.9,
       attribution: `Yield Curve Slope: ${slope} bps, Regime: ${macroData?.regime || 'GOLDILOCKS'}`,
+      status: 'ACTIVE',
+      is_causal: false,
+      influence_path: 'DIAGNOSTIC_REGIME_CONTEXT',
     },
     'aegis-risk-v1': {
       time: latestTime,
@@ -310,19 +408,24 @@ export function computeAssetFactorMatrix(
       direction: riskDirection,
       confidence: 0.85,
       attribution: `Realized volatility regime penalty: ${riskValue.toFixed(2)}`,
+      status: 'ACTIVE',
+      is_causal: true,
+      influence_path: 'REGIME_VOLATILITY_GATE',
     },
   };
 
-  // Equal-weighted empirical composite
-  const factorList = Object.values(factors);
-  const composite = factorList.reduce((acc, f) => acc + f.value, 0) / factorList.length;
+  // Equal-weighted empirical composite computed ONLY over ACTIVE, applicable factors
+  const activeFactors = Object.values(factors).filter((f) => f.status === 'ACTIVE');
+  const composite = activeFactors.length > 0
+    ? activeFactors.reduce((acc, f) => acc + f.value, 0) / activeFactors.length
+    : 0.0;
 
   return {
     symbol: sym,
     timestamp: latestTimestamp,
     factors,
     composite_score: Number(composite.toFixed(4)),
-    orthogonality_score: 0.86, // Average correlation < 0.25
+    orthogonality_score: 0.86,
     active_regime: macroData?.regime || 'GOLDILOCKS',
   };
 }

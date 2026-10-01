@@ -3,7 +3,9 @@
 import Link from 'next/link';
 import React, { useEffect, useState } from 'react';
 import EquityCurveChart, { EquityPoint } from '../components/EquityCurveChart';
+import A3DiagnosticSuite from '../components/A3DiagnosticSuite';
 import { apiUrl, formatFigure, formatPercent } from '@/lib/api';
+import { ResearchIcon, RefreshIcon, PlayIcon, LayersIcon } from '../components/icons';
 
 interface Signal {
   id: string;
@@ -90,7 +92,7 @@ export default function ResearchPage() {
   const [payload, setPayload] = useState<FullBacktestPayload | null>(null);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [source, setSource] = useState<string | null>(null);
-  const [message, setMessage] = useState('Select a signal and run a point-in-time backtest.');
+  const [message, setMessage] = useState('Select an alpha factor and run a point-in-time backtest.');
   const [running, setRunning] = useState(false);
 
   // Save as Experiment modal state
@@ -99,21 +101,21 @@ export default function ResearchPage() {
   const [expDescription, setExpDescription] = useState('');
   const [expTags, setExpTags] = useState('momentum, backtest');
   const [saving, setSaving] = useState(false);
-  const [savedExpId, setSavedExpId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [savedExpId, setSavedExpId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'BACKTEST' | 'DIAGNOSTICS'>('BACKTEST');
 
   useEffect(() => {
     fetch(apiUrl('/api/signals'))
-      .then((response) => response.json())
-      .then((items: Signal[]) => {
-        setSignals(items);
-        if (items[0]) {
-          setSignalId(items[0].id);
-          setExpName(`${items[0].name} - ${symbol} Baseline`);
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: Signal[]) => {
+        setSignals(data);
+        if (data.length > 0) {
+          setSignalId(data[0].id);
         }
       })
-      .catch(() => setMessage('Signal catalog unavailable.'));
-  }, [symbol]);
+      .catch(() => setMessage('Signals unavailable. Verify engine connection.'));
+  }, []);
 
   const selectedSignal = signals.find((s) => s.id === signalId);
 
@@ -189,135 +191,149 @@ export default function ResearchPage() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <header>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <p className="card-title">Research Lab / Strategy Execution</p>
-            <h1 style={{ fontSize: '24px', marginTop: '4px', fontWeight: '700' }}>
-              Reproducible Signal Backtesting
+    <div className="flex flex-col gap-3.5 pb-10">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-[#1b2230]">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-[1px] bg-[#d29922]" />
+            <h1 className="text-base font-bold tracking-tight text-[#e6edf3] font-mono">
+              Research Lab
             </h1>
-            <p
-              style={{
-                color: 'var(--text-muted)',
-                marginTop: '4px',
-                maxWidth: '760px',
-                fontSize: '13px',
-              }}
-            >
-              Deterministic next-bar execution against stored signal observations and real provider
-              candles. Every run is point-in-time aligned with explicit trading-cost and slippage
-              deductions.
-            </p>
           </div>
-          {result && (
+          <p className="text-xs text-[#8b949e] mt-1 font-mono">
+            Deterministic next-bar execution, explicit transaction cost sensitivity & point-in-time invariant enforcement
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* View Mode Switcher */}
+          <div className="flex items-center bg-[#090c10] border border-[#1b2230] rounded-[2px] p-0.5">
             <button
               type="button"
-              className="btn btn-primary"
-              onClick={() => setShowSaveModal(true)}
-              style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+              onClick={() => setViewMode('BACKTEST')}
+              className={`px-3 py-1 text-xs font-mono rounded-[1px] transition-colors ${
+                viewMode === 'BACKTEST'
+                  ? 'bg-[#1b2230] text-[#e6edf3] font-bold border border-[#2f3b52]'
+                  : 'text-[#7d8590] hover:text-[#e6edf3] border border-transparent'
+              }`}
             >
-              <span>+</span> Save as Experiment
+              Backtest Workstation
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('DIAGNOSTICS')}
+              className={`px-3 py-1 text-xs font-mono rounded-[1px] transition-colors ${
+                viewMode === 'DIAGNOSTICS'
+                  ? 'bg-[#1b2230] text-[#e6edf3] font-bold border border-[#2f3b52]'
+                  : 'text-[#7d8590] hover:text-[#e6edf3] border border-transparent'
+              }`}
+            >
+              A³ Factor Diagnostics
+            </button>
+          </div>
+
+          {result && viewMode === 'BACKTEST' && (
+            <button
+              type="button"
+              onClick={() => setShowSaveModal(true)}
+              className="terminal-btn primary text-xs"
+            >
+              <span>+ Save Experiment</span>
             </button>
           )}
         </div>
+      </div>
 
-        {savedExpId && (
-          <div
-            style={{
-              marginTop: '16px',
-              padding: '12px 16px',
-              backgroundColor: 'rgba(16, 185, 129, 0.1)',
-              border: '1px solid var(--accent-green)',
-              borderRadius: '6px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
-            <span style={{ fontSize: '13px', color: 'var(--accent-green)' }}>
-              ✓ Experiment saved successfully with full parameter lineage and run metrics!
-            </span>
-            <Link
-              href="/experiments"
-              className="btn btn-secondary"
-              style={{ fontSize: '11px', padding: '4px 10px' }}
-            >
-              View in Experiment Catalog →
-            </Link>
+      {savedExpId && (
+        <div className="px-3.5 py-2 bg-[#102419] border border-[#235338] rounded-[2px] flex items-center justify-between text-xs font-mono">
+          <span className="text-[#3fb950]">
+            Experiment archived into version-controlled registry: ID {savedExpId.slice(0, 8)}
+          </span>
+          <Link href="/experiments" className="text-[#e6edf3] hover:underline">
+            View in Registry →
+          </Link>
+        </div>
+      )}
+
+      {/* View Mode 1: A3 Empirical Diagnostic Suite */}
+      {viewMode === 'DIAGNOSTICS' && (
+        <A3DiagnosticSuite activeSymbol={symbol} />
+      )}
+
+      {/* View Mode 2: Backtest Workstation */}
+      {viewMode === 'BACKTEST' && (
+        <>
+          {/* Configuration Form */}
+          <div className="panel p-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs font-mono">
+              <div className="flex flex-col gap-1">
+                <span className="metric-label">Factor Strategy</span>
+                <select
+                  value={signalId}
+                  onChange={(e) => setSignalId(e.target.value)}
+                  className="terminal-input w-full"
+                >
+                  {signals.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} (v{s.version})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <span className="metric-label">Instrument Symbol</span>
+                <input
+                  type="text"
+                  value={symbol}
+                  onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+                  placeholder="e.g. BTC, ETH"
+                  className="terminal-input w-full"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <span className="metric-label">Execution Fee (bps)</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={costs}
+                  onChange={(e) => setCosts(e.target.value)}
+                  className="terminal-input w-full tabular-nums"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <span className="metric-label">Slippage (bps)</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={slippage}
+                  onChange={(e) => setSlippage(e.target.value)}
+                  className="terminal-input w-full tabular-nums"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1 justify-end">
+                <button
+                  type="button"
+                  onClick={runBacktest}
+                  disabled={running || !signalId}
+                  className="terminal-btn primary h-[29px] w-full"
+                >
+                  {running ? 'Evaluating...' : 'Execute Backtest'}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-2.5 pt-2 border-t border-[#1b2230] flex items-center justify-between text-xs font-mono text-[#8b949e]">
+              <span>Next-bar close execution (1-bar lag)</span>
+              <span className="truncate max-w-[600px] text-[#8b949e]">{message}</span>
+            </div>
           </div>
-        )}
-      </header>
-
-      {/* Configuration Form */}
-      <section className="card">
-        <div className="grid-4">
-          <label>
-            Signal Strategy
-            <select
-              value={signalId}
-              onChange={(event) => setSignalId(event.target.value)}
-              style={{ width: '100%', marginTop: '4px' }}
-            >
-              {signals.map((signal) => (
-                <option key={signal.id} value={signal.id}>
-                  {signal.name} (v{signal.version})
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Asset Symbol
-            <input
-              value={symbol}
-              onChange={(event) => setSymbol(event.target.value.toUpperCase())}
-              placeholder="e.g. BTC, ETH"
-              style={{ width: '100%', marginTop: '4px' }}
-            />
-          </label>
-          <label>
-            Transaction Cost (bps)
-            <input
-              type="number"
-              min="0"
-              step="0.5"
-              value={costs}
-              onChange={(event) => setCosts(event.target.value)}
-              style={{ width: '100%', marginTop: '4px' }}
-            />
-          </label>
-          <label>
-            Slippage (bps)
-            <input
-              type="number"
-              min="0"
-              step="0.5"
-              value={slippage}
-              onChange={(event) => setSlippage(event.target.value)}
-              style={{ width: '100%', marginTop: '4px' }}
-            />
-          </label>
-        </div>
-
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginTop: '18px',
-          }}
-        >
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={runBacktest}
-            disabled={running || !signalId}
-          >
-            {running ? 'Running Deterministic Backtest...' : 'Run Reproducible Backtest'}
-          </button>
-          <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>{message}</span>
-        </div>
-      </section>
 
       {/* Results View */}
       {result && (
@@ -325,433 +341,232 @@ export default function ResearchPage() {
           {/* Equity Curve & Drawdown Chart */}
           <EquityCurveChart
             data={result.equity_curve || []}
-            title={`${selectedSignal?.name || 'Signal'} on ${symbol} — Cumulative Equity & Drawdown`}
+            title={`${selectedSignal?.name || 'Factor'} on ${symbol} — Equity Curve`}
           />
 
-          {/* Institutional Metrics Grid */}
-          <div>
-            <div
-              style={{
-                fontSize: '12px',
-                textTransform: 'uppercase',
-                color: 'var(--text-muted)',
-                fontWeight: '600',
-                marginBottom: '8px',
-              }}
-            >
+          {/* Institutional Metrics Grid (Tabular Numerals) */}
+          <div className="panel p-3">
+            <div className="text-[10px] uppercase font-bold text-[#7d8590] tracking-wider mb-2 font-mono">
               Institutional Risk & Return Telemetry
             </div>
-            <div className="grid-4">
-              <div className="card">
-                <span className="card-title">Sharpe Ratio</span>
-                <strong
-                  className="card-value"
-                  style={{
-                    fontSize: '22px',
-                    color:
-                      result.sharpe >= 1.0
-                        ? 'var(--accent-green)'
-                        : result.sharpe >= 0
-                          ? 'var(--accent-cyan)'
-                          : 'var(--accent-red)',
-                  }}
-                >
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+              <div className="bg-[#131722] border border-[#1b2230] p-2 rounded-[2px]">
+                <div className="metric-label">Sharpe Ratio</div>
+                <div className={`text-base font-bold font-mono tabular-nums mt-0.5 ${
+                  result.sharpe >= 1.0 ? 'text-[#3fb950]' : result.sharpe >= 0 ? 'text-[#e6edf3]' : 'text-[#f85149]'
+                }`}>
                   {formatFigure(result.sharpe)}
-                </strong>
-                <span className="card-subtitle">Zero-rate baseline</span>
+                </div>
+                <div className="metric-context">RF = 0.0%</div>
               </div>
 
-              <div className="card">
-                <span className="card-title">Sortino Ratio</span>
-                <strong
-                  className="card-value"
-                  style={{ fontSize: '22px', color: 'var(--accent-cyan)' }}
-                >
+              <div className="bg-[#131722] border border-[#1b2230] p-2 rounded-[2px]">
+                <div className="metric-label">Sortino Ratio</div>
+                <div className="text-base font-bold font-mono tabular-nums text-[#e6edf3] mt-0.5">
                   {result.sortino != null ? formatFigure(result.sortino) : '—'}
-                </strong>
-                <span className="card-subtitle">Downside deviation</span>
+                </div>
+                <div className="metric-context">DOWNSIDE VOL</div>
               </div>
 
-              <div className="card">
-                <span className="card-title">CAGR</span>
-                <strong
-                  className="card-value"
-                  style={{
-                    fontSize: '22px',
-                    color: (result.cagr ?? 0) >= 0 ? 'var(--accent-green)' : 'var(--accent-red)',
-                  }}
-                >
+              <div className="bg-[#131722] border border-[#1b2230] p-2 rounded-[2px]">
+                <div className="metric-label">CAGR</div>
+                <div className={`text-base font-bold font-mono tabular-nums mt-0.5 ${
+                  (result.cagr ?? 0) >= 0 ? 'text-[#3fb950]' : 'text-[#f85149]'
+                }`}>
                   {result.cagr != null ? formatPercent(result.cagr) : '—'}
-                </strong>
-                <span className="card-subtitle">Annualized growth</span>
+                </div>
+                <div className="metric-context">ANNUALIZED</div>
               </div>
 
-              <div className="card">
-                <span className="card-title">Max Drawdown</span>
-                <strong
-                  className="card-value"
-                  style={{ fontSize: '22px', color: 'var(--accent-red)' }}
-                >
+              <div className="bg-[#131722] border border-[#1b2230] p-2 rounded-[2px]">
+                <div className="metric-label">Max Drawdown</div>
+                <div className="text-base font-bold font-mono tabular-nums text-[#f85149] mt-0.5">
                   {formatPercent(result.max_drawdown)}
-                </strong>
-                <span className="card-subtitle">Peak-to-trough</span>
+                </div>
+                <div className="metric-context">PEAK-TO-TROUGH</div>
               </div>
 
-              <div className="card">
-                <span className="card-title">Calmar Ratio</span>
-                <strong className="card-value" style={{ fontSize: '20px' }}>
+              <div className="bg-[#131722] border border-[#1b2230] p-2 rounded-[2px]">
+                <div className="metric-label">Calmar Ratio</div>
+                <div className="text-base font-bold font-mono tabular-nums text-[#e6edf3] mt-0.5">
                   {result.calmar != null ? formatFigure(result.calmar) : '—'}
-                </strong>
-                <span className="card-subtitle">CAGR / |Max Drawdown|</span>
+                </div>
+                <div className="metric-context">CAGR / |MAX DD|</div>
               </div>
 
-              <div className="card">
-                <span className="card-title">Win Rate</span>
-                <strong className="card-value" style={{ fontSize: '20px' }}>
+              <div className="bg-[#131722] border border-[#1b2230] p-2 rounded-[2px]">
+                <div className="metric-label">Win Rate</div>
+                <div className="text-base font-bold font-mono tabular-nums text-[#e6edf3] mt-0.5">
                   {result.win_rate != null ? formatPercent(result.win_rate) : '—'}
-                </strong>
-                <span className="card-subtitle">Active bar periods</span>
+                </div>
+                <div className="metric-context">ACTIVE BARS</div>
               </div>
 
-              <div className="card">
-                <span className="card-title">Ann. Volatility</span>
-                <strong className="card-value" style={{ fontSize: '20px' }}>
+              <div className="bg-[#131722] border border-[#1b2230] p-2 rounded-[2px]">
+                <div className="metric-label">Ann. Volatility</div>
+                <div className="text-base font-bold font-mono tabular-nums text-[#e6edf3] mt-0.5">
                   {formatPercent(result.annualized_volatility)}
-                </strong>
-                <span className="card-subtitle">
-                  {result.annualization_factor
-                    ? `${result.annualization_factor.toLocaleString()} periods/yr`
-                    : 'Annualized'}
-                </span>
+                </div>
+                <div className="metric-context">OOS REALIZED</div>
               </div>
 
-              <div className="card">
-                <span className="card-title">Total Return</span>
-                <strong
-                  className="card-value"
-                  style={{
-                    fontSize: '20px',
-                    color: result.total_return >= 0 ? 'var(--accent-green)' : 'var(--accent-red)',
-                  }}
-                >
+              <div className="bg-[#131722] border border-[#1b2230] p-2 rounded-[2px]">
+                <div className="metric-label">Net Return</div>
+                <div className={`text-base font-bold font-mono tabular-nums mt-0.5 ${
+                  result.total_return >= 0 ? 'text-[#3fb950]' : 'text-[#f85149]'
+                }`}>
                   {formatPercent(result.total_return)}
-                </strong>
-                <span className="card-subtitle">Net of costs & slippage</span>
+                </div>
+                <div className="metric-context">NET OF COSTS</div>
               </div>
             </div>
           </div>
 
           {/* Strategy Signal Distribution & Diagnostics */}
-          {payload?.signal_distribution && (
-            <section className="card">
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '12px',
-                }}
-              >
-                <span className="card-title">Signal State Distribution & Exposure Diagnostics</span>
-                <span className="badge badge-green font-mono">
-                  {payload.signal_source || 'Dynamic Evaluation'}
-                </span>
-              </div>
-              <div
-                className="grid-4"
-                style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}
-              >
-                <div style={{ padding: '8px 12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '6px' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>BUY Signals</div>
-                  <strong style={{ fontSize: '16px', color: 'var(--accent-green)' }}>
-                    {payload.signal_distribution.BUY} ({formatPercent(payload.signal_distribution.BUY / (payload.diagnostics?.total_bars || result.observations))})
-                  </strong>
-                </div>
-                <div style={{ padding: '8px 12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '6px' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>SELL Signals</div>
-                  <strong style={{ fontSize: '16px', color: 'var(--accent-red)' }}>
-                    {payload.signal_distribution.SELL} ({formatPercent(payload.signal_distribution.SELL / (payload.diagnostics?.total_bars || result.observations))})
-                  </strong>
-                </div>
-                <div style={{ padding: '8px 12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '6px' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>WATCH Signals</div>
-                  <strong style={{ fontSize: '16px', color: 'var(--accent-cyan)' }}>
-                    {payload.signal_distribution.WATCH} ({formatPercent(payload.signal_distribution.WATCH / (payload.diagnostics?.total_bars || result.observations))})
-                  </strong>
-                </div>
-                <div style={{ padding: '8px 12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '6px' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>NO TRADE Signals</div>
-                  <strong style={{ fontSize: '16px', color: 'var(--text-muted)' }}>
-                    {payload.signal_distribution.NO_TRADE} ({formatPercent(payload.signal_distribution.NO_TRADE / (payload.diagnostics?.total_bars || result.observations))})
-                  </strong>
-                </div>
-              </div>
-
-              {payload.diagnostics && (
-                <div
-                  className="font-mono"
-                  style={{
-                    marginTop: '12px',
-                    padding: '10px',
-                    backgroundColor: 'var(--bg-secondary)',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    color: 'var(--text-muted)',
-                    display: 'flex',
-                    gap: '18px',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <span>
-                    Long Exposure:{' '}
-                    <strong style={{ color: 'var(--accent-green)' }}>
-                      {formatPercent(payload.diagnostics.long_exposure_pct)}
-                    </strong>
-                  </span>
-                  <span>
-                    Short Exposure:{' '}
-                    <strong style={{ color: 'var(--accent-red)' }}>
-                      {formatPercent(payload.diagnostics.short_exposure_pct)}
-                    </strong>
-                  </span>
-                  <span>
-                    Cash / Neutral:{' '}
-                    <strong style={{ color: 'var(--text-primary)' }}>
-                      {formatPercent(payload.diagnostics.cash_pct)}
-                    </strong>
-                  </span>
-                  <span>
-                    Entries:{' '}
-                    <strong style={{ color: 'var(--text-primary)' }}>{result.entries ?? 0}</strong>
-                  </span>
-                  <span>
-                    Exits:{' '}
-                    <strong style={{ color: 'var(--text-primary)' }}>{result.exits ?? 0}</strong>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {payload?.signal_distribution && (
+              <div className="panel overflow-hidden">
+                <div className="panel-header">
+                  <span className="panel-title">Signal State Allocation</span>
+                  <span className="text-[10px] font-mono text-[#7d8590]">
+                    BARS: {result.observations}
                   </span>
                 </div>
-              )}
-            </section>
-          )}
-
-          {/* Factor Contribution Traceability */}
-          {payload?.diagnostics?.factor_contributions && payload.diagnostics.factor_contributions.length > 0 && (
-            <section className="card">
-              <span className="card-title" style={{ marginBottom: '12px', display: 'block' }}>
-                A³ Learned Factor Contribution Traceability (Latest Point-in-Time Bar)
-              </span>
-              <div className="grid-4" style={{ gap: '10px' }}>
-                {payload.diagnostics.factor_contributions.map((fc) => (
-                  <div
-                    key={fc.factor_id}
-                    style={{
-                      padding: '10px',
-                      backgroundColor: 'var(--bg-secondary)',
-                      borderRadius: '6px',
-                      borderLeft: `3px solid ${
-                        fc.net_contribution > 0
-                          ? 'var(--accent-green)'
-                          : fc.net_contribution < 0
-                          ? 'var(--accent-red)'
-                          : 'var(--text-muted)'
-                      }`,
-                    }}
-                  >
-                    <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-primary)' }}>
-                      {fc.name}
+                <div className="p-3">
+                  <div className="grid grid-cols-5 gap-2 text-center font-mono">
+                    <div className="bg-[#131722] p-2 rounded-[2px] border border-[#1b2230]">
+                      <div className="text-[10px] text-[#3fb950] font-bold">LONG</div>
+                      <div className="text-base font-bold text-[#e6edf3] mt-0.5 tabular-nums">
+                        {payload.signal_distribution.BUY}
+                      </div>
                     </div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        marginTop: '4px',
-                        fontSize: '11px',
-                        color: 'var(--text-muted)',
-                      }}
-                    >
-                      <span>Raw z: {fc.raw_score.toFixed(2)}σ</span>
-                      <span>Weight: {fc.learned_beta}</span>
+                    <div className="bg-[#131722] p-2 rounded-[2px] border border-[#1b2230]">
+                      <div className="text-[10px] text-[#f85149] font-bold">SHORT</div>
+                      <div className="text-base font-bold text-[#e6edf3] mt-0.5 tabular-nums">
+                        {payload.signal_distribution.SELL}
+                      </div>
                     </div>
-                    <div
-                      style={{
-                        fontSize: '12px',
-                        fontWeight: '600',
-                        marginTop: '4px',
-                        color:
-                          fc.net_contribution > 0
-                            ? 'var(--accent-green)'
-                            : fc.net_contribution < 0
-                            ? 'var(--accent-red)'
-                            : 'var(--text-primary)',
-                      }}
-                    >
-                      Net Impact: {fc.net_contribution > 0 ? '+' : ''}
-                      {fc.net_contribution.toFixed(4)}
+                    <div className="bg-[#131722] p-2 rounded-[2px] border border-[#1b2230]">
+                      <div className="text-[10px] text-[#d29922] font-bold">WATCH</div>
+                      <div className="text-base font-bold text-[#e6edf3] mt-0.5 tabular-nums">
+                        {payload.signal_distribution.WATCH}
+                      </div>
+                    </div>
+                    <div className="bg-[#131722] p-2 rounded-[2px] border border-[#1b2230]">
+                      <div className="text-[10px] text-[#7d8590] font-bold">NEUTRAL</div>
+                      <div className="text-base font-bold text-[#e6edf3] mt-0.5 tabular-nums">
+                        {payload.signal_distribution.NO_TRADE}
+                      </div>
+                    </div>
+                    <div className="bg-[#131722] p-2 rounded-[2px] border border-[#1b2230]">
+                      <div className="text-[10px] text-[#586069] font-bold">N/A</div>
+                      <div className="text-base font-bold text-[#e6edf3] mt-0.5 tabular-nums">
+                        {payload.signal_distribution.UNAVAILABLE}
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Execution & Methodology Details */}
-          <section className="card">
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '8px',
-              }}
-            >
-              <span className="card-title">Execution Model & Assumptions</span>
-              <span className="badge badge-cyan font-mono">{source || 'Market Feed'}</span>
-            </div>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '13px', lineHeight: '1.5' }}>
-              {message}
-            </p>
-            <div
-              className="font-mono"
-              style={{
-                marginTop: '12px',
-                padding: '10px',
-                backgroundColor: 'var(--bg-secondary)',
-                borderRadius: '6px',
-                fontSize: '11px',
-                color: 'var(--text-muted)',
-                display: 'flex',
-                gap: '20px',
-                flexWrap: 'wrap',
-              }}
-            >
-              <span>
-                Observations:{' '}
-                <strong style={{ color: 'var(--text-primary)' }}>{result.observations} bars</strong>
-              </span>
-              <span>
-                Annualization:{' '}
-                <strong style={{ color: 'var(--accent-cyan)' }}>
-                  {result.annualization_basis || `${result.annualization_factor || 19656} periods/yr`}
-                </strong>
-              </span>
-              <span>
-                Turnover:{' '}
-                <strong style={{ color: 'var(--text-primary)' }}>
-                  {formatFigure(result.turnover)} units
-                </strong>
-              </span>
-              <span>
-                Transaction Cost:{' '}
-                <strong style={{ color: 'var(--text-primary)' }}>
-                  {result.transaction_cost_bps} bps
-                </strong>
-              </span>
-              <span>
-                Slippage:{' '}
-                <strong style={{ color: 'var(--text-primary)' }}>{result.slippage_bps} bps</strong>
-              </span>
-              <span>
-                Execution:{' '}
-                <strong style={{ color: 'var(--accent-green)' }}>{result.execution}</strong>
-              </span>
-            </div>
-          </section>
-        </>
-      )}
-
-      {/* Save as Experiment Modal */}
-      {showSaveModal && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.75)',
-            backdropFilter: 'blur(4px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }}
-        >
-          <div
-            className="card"
-            style={{
-              width: '500px',
-              maxWidth: '90vw',
-              backgroundColor: 'var(--bg-card)',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.8)',
-            }}
-          >
-            <h2 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '12px' }}>
-              Save Backtest as Experiment
-            </h2>
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>
-              Store this backtest configuration and its results permanently in the Experiment
-              Catalog for reproducible tracking and side-by-side comparison.
-            </p>
-
-            {saveError && (
-              <div style={{ color: 'var(--accent-red)', fontSize: '12px', marginBottom: '12px' }}>
-                Error: {saveError}
+                </div>
               </div>
             )}
 
-            <form
-              onSubmit={handleSaveExperiment}
-              style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}
-            >
-              <label>
-                Experiment Name *
+            {payload?.diagnostics && (
+              <div className="panel overflow-hidden">
+                <div className="panel-header">
+                  <span className="panel-title">Exposure Breakdown</span>
+                  <span className="text-[10px] font-mono text-[#7d8590]">
+                    TURNOVER: {formatFigure(result.turnover)}x
+                  </span>
+                </div>
+                <div className="p-3 text-xs font-mono flex flex-col gap-2">
+                  <div className="flex justify-between py-1 border-b border-[#19202e]">
+                    <span className="text-[#7d8590]">Long Exposure:</span>
+                    <span className="font-bold text-[#3fb950] tabular-nums">
+                      {formatPercent(payload.diagnostics.long_exposure_pct)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-[#19202e]">
+                    <span className="text-[#7d8590]">Short Exposure:</span>
+                    <span className="font-bold text-[#f85149] tabular-nums">
+                      {formatPercent(payload.diagnostics.short_exposure_pct)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1">
+                    <span className="text-[#7d8590]">Cash / Unexposed:</span>
+                    <span className="font-bold text-[#8b949e] tabular-nums">
+                      {formatPercent(payload.diagnostics.cash_pct)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+        </>
+      )}
+
+      {/* Save Modal */}
+      {showSaveModal && (
+        <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4">
+          <div className="bg-[#0e1117] border border-[#222c3f] rounded-[3px] p-4 max-w-md w-full font-mono">
+            <div className="text-xs font-bold uppercase tracking-wider text-[#e6edf3] mb-3 pb-2 border-b border-[#19202e]">
+              Archive Backtest to Experiment Registry
+            </div>
+            {saveError && (
+              <div className="mb-3 p-2 bg-[#28161a] border border-[#482025] text-[#f85149] text-xs">
+                {saveError}
+              </div>
+            )}
+            <form onSubmit={handleSaveExperiment} className="flex flex-col gap-3 text-xs">
+              <div>
+                <label className="text-[10px] text-[#7d8590] uppercase block mb-1">
+                  Experiment Name
+                </label>
                 <input
-                  required
+                  type="text"
                   value={expName}
                   onChange={(e) => setExpName(e.target.value)}
-                  placeholder="e.g. BTC Momentum Q3"
-                  style={{ width: '100%', marginTop: '4px' }}
+                  className="terminal-input w-full"
+                  required
                 />
-              </label>
-
-              <label>
-                Description
+              </div>
+              <div>
+                <label className="text-[10px] text-[#7d8590] uppercase block mb-1">
+                  Description
+                </label>
                 <textarea
-                  rows={3}
                   value={expDescription}
                   onChange={(e) => setExpDescription(e.target.value)}
-                  placeholder="Research hypothesis and test details..."
-                  style={{ width: '100%', marginTop: '4px', resize: 'vertical' }}
+                  className="terminal-input w-full h-16 resize-none"
                 />
-              </label>
-
-              <label>
-                Tags (comma-separated)
+              </div>
+              <div>
+                <label className="text-[10px] text-[#7d8590] uppercase block mb-1">
+                  Tags (comma separated)
+                </label>
                 <input
+                  type="text"
                   value={expTags}
                   onChange={(e) => setExpTags(e.target.value)}
-                  placeholder="e.g. momentum, crypto, production"
-                  style={{ width: '100%', marginTop: '4px' }}
+                  className="terminal-input w-full"
                 />
-              </label>
+              </div>
 
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'flex-end',
-                  gap: '10px',
-                  marginTop: '16px',
-                }}
-              >
+              <div className="flex justify-end gap-2 mt-2 pt-2 border-t border-[#19202e]">
                 <button
                   type="button"
-                  className="btn btn-secondary"
                   onClick={() => setShowSaveModal(false)}
-                  disabled={saving}
+                  className="terminal-btn"
                 >
-                  Cancel
+                  CANCEL
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={saving}>
-                  {saving ? 'Saving Experiment...' : 'Confirm & Save'}
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="terminal-btn primary"
+                >
+                  {saving ? 'SAVING...' : 'ARCHIVE RUN'}
                 </button>
               </div>
             </form>

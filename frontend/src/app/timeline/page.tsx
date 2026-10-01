@@ -41,241 +41,186 @@ export default function TimelinePage() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div>
-        <h1 style={{ fontSize: '20px', fontWeight: '700', letterSpacing: '-0.5px' }}>
-          Append-Only Event Stream Ledger
-        </h1>
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
-          Immutable TimescaleDB hypertable audit log supporting deterministic time-travel and
-          replay.
-        </p>
+    <div className="flex flex-col gap-4 pb-10">
+      {/* Page Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-[#1b2230]">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-[1px] bg-[#d29922]" />
+            <h1 className="text-base font-bold tracking-tight text-[#e6edf3] font-mono">
+              Event Stream Ledger
+            </h1>
+          </div>
+          <p className="text-xs text-[#8b949e] mt-1 font-mono">
+            Immutable TimescaleDB hypertable audit log supporting deterministic time-travel and replay
+          </p>
+        </div>
+        <button
+          className="terminal-btn text-xs"
+          onClick={fetchEvents}
+        >
+          Refresh Ledger
+        </button>
       </div>
 
       {/* Metrics Row */}
-      <div className="grid-4">
-        <div className="card">
-          <span className="card-title">Logged Events</span>
-          <span className="card-value">{events.length}</span>
-          <span className="card-subtitle">Recent window captured</span>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px] flex flex-col justify-between">
+          <span className="metric-label">Logged Events</span>
+          <span className="text-xl font-bold font-mono text-[#e6edf3] tabular-nums mt-1">{events.length}</span>
+          <span className="text-[11px] text-[#586069] font-mono mt-1">Active window captured</span>
         </div>
-        <div className="card">
-          <span className="card-title">Partition Strategy</span>
-          <span className="card-value" style={{ color: 'var(--accent-green)', fontSize: '20px' }}>
-            TIMESTAMP UTC
+        <div className="bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px] flex flex-col justify-between">
+          <span className="metric-label">Partition Strategy</span>
+          <span className="text-xl font-bold font-mono text-[#3fb950] mt-1">
+            Timestamp UTC
           </span>
-          <span className="card-subtitle">Hypertables indexed</span>
+          <span className="text-[11px] text-[#586069] font-mono mt-1">Hypertables indexed</span>
         </div>
-        <div className="card">
-          <span className="card-title">Correlation Tracing</span>
-          <span className="card-value" style={{ color: 'var(--accent-cyan)', fontSize: '20px' }}>
-            UUIDv4 LINKED
+        <div className="bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px] flex flex-col justify-between">
+          <span className="metric-label">Correlation Tracing</span>
+          <span className="text-xl font-bold font-mono text-[#58a6ff] mt-1">
+            UUIDv4 Linked
           </span>
-          <span className="card-subtitle">End-to-end lineage</span>
+          <span className="text-[11px] text-[#586069] font-mono mt-1">End-to-end lineage</span>
         </div>
-        <div className="card">
-          <span className="card-title">Replay Capability</span>
-          <span className="card-value" style={{ color: 'var(--accent-purple)', fontSize: '20px' }}>
-            ZERO-BIAS
+        <div className="bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px] flex flex-col justify-between">
+          <span className="metric-label">Replay Capability</span>
+          <span className="text-xl font-bold font-mono text-[#e3b341] mt-1">
+            Zero-Bias
           </span>
-          <span className="card-subtitle">Deterministic replay active</span>
+          <span className="text-[11px] text-[#586069] font-mono mt-1">Deterministic replay active</span>
         </div>
       </div>
 
       {/* Event Stream & Inspector */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '24px' }}>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
         {/* Events Table */}
-        <div className="table-container">
-          <div className="table-header">
-            <span style={{ fontWeight: '600', fontSize: '13px' }}>Event Stream Log</span>
-            <button
-              className="btn btn-secondary"
-              onClick={fetchEvents}
-              style={{ padding: '4px 8px', fontSize: '11px' }}
-            >
-              Refresh
-            </button>
+        <div className="lg:col-span-7 panel overflow-hidden">
+          <div className="panel-header">
+            <span className="panel-title">Event Stream Log</span>
+            <span className="text-xs font-mono text-[#8b949e]">{events.length} Records</span>
           </div>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Event Type</th>
-                <th>Source</th>
-                <th>Correlation ID</th>
-                <th>Timestamp</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
+          <div className="overflow-x-auto max-h-[620px]">
+            <table className="terminal-table">
+              <thead>
                 <tr>
-                  <td colSpan={4} style={{ textAlign: 'center', padding: '30px' }}>
-                    Loading event log...
-                  </td>
+                  <th>Event Type</th>
+                  <th>Source</th>
+                  <th>Correlation ID</th>
+                  <th>Timestamp</th>
                 </tr>
-              ) : events.length === 0 ? (
-                <tr>
-                  <td colSpan={4} style={{ textAlign: 'center', padding: '30px' }}>
-                    No events recorded.
-                  </td>
-                </tr>
-              ) : (
-                events.map((evt) => {
-                  const isSelected = selectedEvent?.event_id === evt.event_id;
-                  return (
-                    <tr
-                      key={evt.event_id}
-                      onClick={() => setSelectedEvent(evt)}
-                      style={{
-                        cursor: 'pointer',
-                        backgroundColor: isSelected ? 'var(--bg-card-hover)' : undefined,
-                      }}
-                    >
-                      <td>
-                        <span
-                          className={`badge ${
-                            evt.event_type.includes('Success') ||
-                            evt.event_type.includes('Completed')
-                              ? 'badge-green'
-                              : evt.event_type.includes('Failed') ||
-                                  evt.event_type.includes('Error')
-                                ? 'badge-red'
-                                : evt.event_type.includes('Signal')
-                                  ? 'badge-cyan'
-                                  : 'badge-amber'
-                          } font-mono`}
-                        >
-                          {evt.event_type}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: '12px', color: 'var(--text-primary)' }}>
-                        {evt.source}
-                      </td>
-                      <td>
-                        <span
-                          className="font-mono"
-                          style={{ fontSize: '11px', color: 'var(--text-muted)' }}
-                        >
-                          {evt.correlation_id.slice(0, 8)}...
-                        </span>
-                      </td>
-                      <td style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        {new Date(evt.timestamp).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          second: '2-digit',
-                        })}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={4} className="text-center py-8 text-[#586069] text-xs">
+                      Loading event log...
+                    </td>
+                  </tr>
+                ) : events.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="text-center py-8 text-[#586069] text-xs">
+                      No events recorded.
+                    </td>
+                  </tr>
+                ) : (
+                  events.map((evt) => {
+                    const isSelected = selectedEvent?.event_id === evt.event_id;
+                    return (
+                      <tr
+                        key={evt.event_id}
+                        onClick={() => setSelectedEvent(evt)}
+                        className={`cursor-pointer transition-colors ${
+                          isSelected ? 'bg-[#192231]/80' : 'hover:bg-[#121722]'
+                        }`}
+                      >
+                        <td>
+                          <span
+                            className={`font-mono text-xs font-semibold ${
+                              evt.event_type.includes('Success') ||
+                              evt.event_type.includes('Completed')
+                                ? 'text-[#3fb950]'
+                                : evt.event_type.includes('Failed') ||
+                                    evt.event_type.includes('Error')
+                                  ? 'text-[#f85149]'
+                                  : evt.event_type.includes('Signal')
+                                    ? 'text-[#58a6ff]'
+                                    : 'text-[#e3b341]'
+                            }`}
+                          >
+                            {evt.event_type}
+                          </span>
+                        </td>
+                        <td className="text-xs text-[#e6edf3] font-mono">
+                          {evt.source}
+                        </td>
+                        <td>
+                          <span className="font-mono text-xs text-[#8b949e]">
+                            {evt.correlation_id ? evt.correlation_id.slice(0, 8) : '—'}
+                          </span>
+                        </td>
+                        <td className="text-xs text-[#586069] font-mono">
+                          {new Date(evt.timestamp).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                          })}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* Selected Event JSON Inspector */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div className="lg:col-span-5 flex flex-col gap-3.5">
           {selectedEvent ? (
-            <div className="card">
-              <div
-                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-              >
-                <span className="card-title">Event Payload Inspector</span>
-                <span className="badge badge-cyan font-mono">{selectedEvent.event_type}</span>
+            <div className="panel p-4 flex flex-col gap-3">
+              <div className="flex justify-between items-center pb-2.5 border-b border-[#1b2230]">
+                <span className="metric-label">Event Payload Inspector</span>
+                <span className="text-xs font-mono text-[#58a6ff] font-bold">{selectedEvent.event_type}</span>
               </div>
 
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8px',
-                  fontSize: '12px',
-                  marginTop: '8px',
-                }}
-              >
-                <div>
-                  <strong>Event ID:</strong>{' '}
-                  <span className="font-mono" style={{ color: 'var(--text-muted)' }}>
-                    {selectedEvent.event_id}
-                  </span>
+              <div className="flex flex-col gap-2 text-xs font-mono bg-[#10141d] p-3 rounded-[2px] border border-[#1b2230]">
+                <div className="flex justify-between">
+                  <span className="text-[#586069]">Event ID</span>
+                  <span className="text-[#8b949e]">{selectedEvent.event_id.slice(0, 16)}...</span>
                 </div>
-                <div>
-                  <strong>Correlation ID:</strong>{' '}
-                  <span className="font-mono" style={{ color: 'var(--text-muted)' }}>
-                    {selectedEvent.correlation_id}
-                  </span>
+                <div className="flex justify-between">
+                  <span className="text-[#586069]">Correlation ID</span>
+                  <span className="text-[#8b949e]">{selectedEvent.correlation_id}</span>
                 </div>
-                <div>
-                  <strong>Source System:</strong>{' '}
-                  <span className="font-mono">{selectedEvent.source}</span>
+                <div className="flex justify-between">
+                  <span className="text-[#586069]">Source System</span>
+                  <span className="text-[#e6edf3]">{selectedEvent.source}</span>
                 </div>
-                <div>
-                  <strong>UTC Timestamp:</strong>{' '}
-                  <span className="font-mono">{selectedEvent.timestamp}</span>
+                <div className="flex justify-between">
+                  <span className="text-[#586069]">Timestamp</span>
+                  <span className="text-[#e6edf3]">{new Date(selectedEvent.timestamp).toISOString()}</span>
                 </div>
               </div>
 
-              <div style={{ marginTop: '12px' }}>
-                <div
-                  style={{
-                    fontSize: '11px',
-                    textTransform: 'uppercase',
-                    color: 'var(--text-muted)',
-                    fontWeight: '600',
-                  }}
-                >
-                  Payload Data
-                </div>
-                <pre
-                  className="font-mono"
-                  style={{
-                    marginTop: '6px',
-                    padding: '12px',
-                    backgroundColor: 'var(--bg-secondary)',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    color: 'var(--accent-green)',
-                    border: '1px solid var(--border-color)',
-                    maxHeight: '220px',
-                    overflowY: 'auto',
-                  }}
-                >
+              <div>
+                <span className="metric-label block mb-1.5">Payload Data</span>
+                <pre className="font-mono text-xs text-[#3fb950] bg-[#090c10] border border-[#1b2230] p-3 rounded-[2px] max-h-56 overflow-y-auto leading-relaxed">
                   {JSON.stringify(selectedEvent.payload, null, 2)}
                 </pre>
               </div>
 
-              <div style={{ marginTop: '8px' }}>
-                <div
-                  style={{
-                    fontSize: '11px',
-                    textTransform: 'uppercase',
-                    color: 'var(--text-muted)',
-                    fontWeight: '600',
-                  }}
-                >
-                  Metadata Context
-                </div>
-                <pre
-                  className="font-mono"
-                  style={{
-                    marginTop: '6px',
-                    padding: '10px',
-                    backgroundColor: 'var(--bg-secondary)',
-                    borderRadius: '6px',
-                    fontSize: '11px',
-                    color: 'var(--accent-cyan)',
-                    border: '1px solid var(--border-color)',
-                  }}
-                >
+              <div>
+                <span className="metric-label block mb-1.5">Metadata Context</span>
+                <pre className="font-mono text-xs text-[#58a6ff] bg-[#090c10] border border-[#1b2230] p-3 rounded-[2px] max-h-40 overflow-y-auto leading-relaxed">
                   {JSON.stringify(selectedEvent.metadata, null, 2)}
                 </pre>
               </div>
             </div>
           ) : (
-            <div className="card" style={{ textAlign: 'center', padding: '60px 20px' }}>
-              <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
-                Select an event to inspect its payload
-              </span>
+            <div className="panel p-12 text-center text-xs text-[#586069] font-mono">
+              Select an event from the ledger to inspect its payload
             </div>
           )}
         </div>

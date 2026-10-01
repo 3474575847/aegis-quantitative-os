@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { apiUrl, formatFigure, formatPercent } from '@/lib/api';
+import PortfolioVisualizer from '../components/visuals/PortfolioVisualizer';
 
 interface HoldingRow {
   symbol: string;
@@ -131,66 +132,68 @@ export default function PortfolioPage() {
   const weightOk = Math.abs(weightTotal - 1.0) <= 0.001;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <header>
-        <p className="card-title">Portfolio Lab / Scenario Analysis</p>
-        <h1 style={{ fontSize: '26px', marginTop: '6px' }}>Stress test a research portfolio</h1>
-        <p style={{ color: 'var(--text-muted)', marginTop: '6px', maxWidth: '760px' }}>
-          Enter holdings and percentage shocks. Prices are fetched live from market providers.
-          Weighted impact is the sum of (weight × shock) across all holdings. This is a research
-          tool — not an execution engine.
-        </p>
-      </header>
+    <div className="flex flex-col gap-4 pb-10">
+      {/* Page Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-[#1b2230]">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-[1px] bg-[#d29922]" />
+            <h1 className="text-base font-bold tracking-tight text-[#e6edf3] font-mono">
+              Portfolio Lab
+            </h1>
+          </div>
+          <p className="text-xs text-[#8b949e] mt-1 font-mono">
+            Deterministic portfolio stress testing, multi-asset shocks & provider-backed valuation telemetry
+          </p>
+        </div>
+      </div>
+
+      {/* Visual Allocation Distribution & Macro Stress Test Matrix */}
+      <PortfolioVisualizer
+        holdings={holdings.map((h) => ({
+          symbol: h.symbol,
+          weight: parseFloat(h.weight) || 0,
+        }))}
+      />
 
       {/* Holdings Editor */}
-      <section className="card">
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: '16px',
-          }}
-        >
-          <span className="card-title">Holdings</span>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+      <section className="panel overflow-hidden">
+        <div className="panel-header">
+          <span className="panel-title">Portfolio Allocation & Shocks</span>
+          <div className="flex items-center gap-2">
             <span
-              style={{
-                fontFamily: 'var(--font-mono)',
-                fontSize: '12px',
-                color: weightOk ? 'var(--accent-green)' : 'var(--accent-amber)',
-              }}
+              className={`font-mono text-xs ${
+                weightOk ? 'text-[#3fb950]' : 'text-[#e3b341]'
+              }`}
             >
               Σ weights = {formatFigure(weightTotal)}
             </span>
             <button
               type="button"
-              className="btn btn-secondary"
+              className="terminal-btn text-xs"
               onClick={normalizeWeights}
               title="Rescale all weights to sum to 1.0"
-              style={{ fontSize: '11px', padding: '4px 10px' }}
             >
               Normalize
             </button>
             <button
               type="button"
-              className="btn btn-secondary"
+              className="terminal-btn primary text-xs"
               onClick={addHolding}
-              style={{ fontSize: '11px', padding: '4px 10px' }}
             >
-              + Add
+              + Add Asset
             </button>
           </div>
         </div>
 
-        <div className="table-container" style={{ border: 'none' }}>
-          <table className="data-table">
+        <div className="overflow-x-auto">
+          <table className="terminal-table">
             <thead>
               <tr>
                 <th>Symbol</th>
-                <th>Weight (0–1)</th>
-                <th>Scenario shock (%)</th>
-                <th style={{ width: '40px' }}></th>
+                <th>Target Weight (0–1)</th>
+                <th>Scenario Shock (%)</th>
+                <th className="w-10"></th>
               </tr>
             </thead>
             <tbody>
@@ -201,16 +204,7 @@ export default function PortfolioPage() {
                       value={row.symbol}
                       onChange={(e) => updateHolding(i, 'symbol', e.target.value.toUpperCase())}
                       placeholder="e.g. AAPL"
-                      style={{
-                        background: 'transparent',
-                        border: '1px solid var(--border-color)',
-                        borderRadius: '4px',
-                        color: 'var(--text-primary)',
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: '13px',
-                        padding: '4px 8px',
-                        width: '90px',
-                      }}
+                      className="terminal-input w-24 text-xs font-bold"
                     />
                   </td>
                   <td>
@@ -221,57 +215,33 @@ export default function PortfolioPage() {
                       max="1"
                       value={row.weight}
                       onChange={(e) => updateHolding(i, 'weight', e.target.value)}
-                      style={{
-                        background: 'transparent',
-                        border: '1px solid var(--border-color)',
-                        borderRadius: '4px',
-                        color: 'var(--text-primary)',
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: '13px',
-                        padding: '4px 8px',
-                        width: '90px',
-                      }}
+                      className="terminal-input w-24 text-xs tabular-nums"
                     />
                   </td>
                   <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div className="flex items-center gap-1.5">
                       <input
                         type="number"
                         step="1"
                         value={row.shock}
                         onChange={(e) => updateHolding(i, 'shock', e.target.value)}
                         placeholder="0"
-                        style={{
-                          background: 'transparent',
-                          border: '1px solid var(--border-color)',
-                          borderRadius: '4px',
-                          color:
-                            parseFloat(row.shock) > 0
-                              ? 'var(--accent-green)'
-                              : parseFloat(row.shock) < 0
-                                ? 'var(--accent-red)'
-                                : 'var(--text-secondary)',
-                          fontFamily: 'var(--font-mono)',
-                          fontSize: '13px',
-                          padding: '4px 8px',
-                          width: '80px',
-                        }}
+                        className={`terminal-input w-20 text-xs tabular-nums font-semibold ${
+                          parseFloat(row.shock) > 0
+                            ? 'text-[#3fb950]'
+                            : parseFloat(row.shock) < 0
+                              ? 'text-[#f85149]'
+                              : 'text-[#8b949e]'
+                        }`}
                       />
-                      <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>%</span>
+                      <span className="text-[#586069] text-xs font-mono">%</span>
                     </div>
                   </td>
                   <td>
                     <button
                       type="button"
                       onClick={() => removeHolding(i)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--text-muted)',
-                        cursor: 'pointer',
-                        fontSize: '14px',
-                        padding: '4px',
-                      }}
+                      className="text-[#7d8590] hover:text-[#f85149] text-sm font-mono px-2 transition-colors"
                       title="Remove holding"
                     >
                       ×
@@ -284,22 +254,22 @@ export default function PortfolioPage() {
         </div>
 
         {error && (
-          <p style={{ color: 'var(--accent-amber)', fontSize: '12px', marginTop: '12px' }}>
-            ⚠ {error}
-          </p>
+          <div className="p-3 bg-[#28161a] border-t border-[#482025] text-[#f85149] text-xs font-mono">
+            {error}
+          </div>
         )}
 
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '16px' }}>
+        <div className="p-3.5 border-t border-[#1b2230] flex items-center justify-between flex-wrap gap-3">
           <button
             type="button"
-            className="btn btn-primary"
+            className="terminal-btn primary text-xs py-1.5 px-4 font-semibold"
             onClick={runScenario}
             disabled={running}
           >
-            {running ? 'Calculating...' : 'Run scenario'}
+            {running ? 'Executing Scenario...' : 'Execute Stress Test'}
           </button>
           {message && !error && (
-            <p style={{ color: 'var(--text-muted)', fontSize: '12px' }}>{message}</p>
+            <span className="text-xs text-[#8b949e] font-mono">{message}</span>
           )}
         </div>
       </section>
@@ -307,159 +277,136 @@ export default function PortfolioPage() {
       {/* Results */}
       {result && (
         <>
-          <div className="grid-4">
-            <div className="card">
-              <span className="card-title">Weighted impact</span>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px] flex flex-col justify-between">
+              <span className="metric-label">Weighted Portfolio Impact</span>
               <strong
-                className="card-value"
-                style={{
-                  color:
-                    result.weighted_shock > 0
-                      ? 'var(--accent-green)'
-                      : result.weighted_shock < 0
-                        ? 'var(--accent-red)'
-                        : 'var(--text-primary)',
-                }}
+                className={`text-xl font-bold font-mono tabular-nums mt-1 ${
+                  result.weighted_shock > 0
+                    ? 'text-[#3fb950]'
+                    : result.weighted_shock < 0
+                      ? 'text-[#f85149]'
+                      : 'text-[#e6edf3]'
+                }`}
               >
                 {result.weighted_shock >= 0 ? '+' : ''}
                 {formatPercent(result.weighted_shock)}
               </strong>
-              <span className="card-subtitle">Σ(weight × shock)</span>
+              <span className="text-[11px] text-[#586069] font-mono mt-1">Σ(weight × shock)</span>
             </div>
-            <div className="card">
-              <span className="card-title">Holdings</span>
-              <strong className="card-value">{result.holdings.length}</strong>
-              <span className="card-subtitle">
-                {result.holdings.filter((h) => h.is_fallback).length} fallback
-                {' · '}
-                {result.holdings.filter((h) => !h.is_fallback).length} live
+
+            <div className="bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px] flex flex-col justify-between">
+              <span className="metric-label">Holdings Count</span>
+              <strong className="text-xl font-bold font-mono text-[#e6edf3] mt-1">{result.holdings.length}</strong>
+              <span className="text-[11px] text-[#8b949e] font-mono mt-1">
+                {result.holdings.filter((h) => !h.is_fallback).length} live · {result.holdings.filter((h) => h.is_fallback).length} cached
               </span>
             </div>
-            <div className="card">
-              <span className="card-title">Portfolio basis</span>
-              <strong className="card-value">1.0000</strong>
-              <span className="card-subtitle">Unit starting value</span>
+
+            <div className="bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px] flex flex-col justify-between">
+              <span className="metric-label">Portfolio Basis</span>
+              <strong className="text-xl font-bold font-mono text-[#e6edf3] mt-1">1.0000</strong>
+              <span className="text-[11px] text-[#586069] font-mono mt-1">Unit starting base</span>
             </div>
-            <div className="card">
-              <span className="card-title">Data quality</span>
-              <strong
-                className="card-value"
-                style={{
-                  color: result.holdings.every((h) => !h.is_fallback)
-                    ? 'var(--accent-green)'
-                    : 'var(--accent-amber)',
-                }}
-              >
-                {result.holdings.every((h) => !h.is_fallback) ? 'ALL LIVE' : 'PARTIAL FALLBACK'}
-              </strong>
-              <span className="card-subtitle">Quote provenance</span>
+
+            <div className="bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px] flex flex-col justify-between">
+              <span className="metric-label">Feed Integrity</span>
+              <div className="flex items-center gap-2 mt-1">
+                <span className={`w-2 h-2 rounded-full ${
+                  result.holdings.every((h) => !h.is_fallback) ? 'bg-[#3fb950]' : 'bg-[#e3b341]'
+                }`} />
+                <span className={`text-xl font-bold font-mono ${
+                  result.holdings.every((h) => !h.is_fallback) ? 'text-[#3fb950]' : 'text-[#e3b341]'
+                }`}>
+                  {result.holdings.every((h) => !h.is_fallback) ? 'All Live' : 'Cached Fallback'}
+                </span>
+              </div>
+              <span className="text-[11px] text-[#586069] font-mono mt-1">Provider provenance</span>
             </div>
           </div>
 
           {/* Per-holding breakdown */}
-          <section className="table-container">
-            <div className="table-header">
-              <span>Holding provenance and scenario impact</span>
-              <span className="badge badge-cyan">PROVIDER-BACKED</span>
+          <section className="panel overflow-hidden">
+            <div className="panel-header">
+              <span className="panel-title">Holding Provenance & Attribution</span>
+              <span className="text-xs font-mono text-[#3fb950]">Live Evaluated</span>
             </div>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Asset</th>
-                  <th>Weight</th>
-                  <th>Live price</th>
-                  <th>Scenario shock</th>
-                  <th>P&amp;L contribution</th>
-                  <th>Provider</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.holdings.map((holding) => {
-                  const contribution = holding.weight * holding.scenario_shock;
-                  return (
-                    <tr key={holding.symbol}>
-                      <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-                        {holding.symbol}
-                      </td>
-                      <td className="font-mono">{formatPercent(holding.weight)}</td>
-                      <td className="font-mono">
-                        ${formatFigure(holding.price)}
-                      </td>
-                      <td
-                        className="font-mono"
-                        style={{
-                          color:
+            <div className="overflow-x-auto">
+              <table className="terminal-table">
+                <thead>
+                  <tr>
+                    <th>Asset</th>
+                    <th>Weight</th>
+                    <th className="text-right">Live Price</th>
+                    <th className="text-right">Scenario Shock</th>
+                    <th className="text-right">P&amp;L Contribution</th>
+                    <th>Provider</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.holdings.map((holding) => {
+                    const contribution = holding.weight * holding.scenario_shock;
+                    return (
+                      <tr key={holding.symbol}>
+                        <td className="font-mono font-bold text-[#e6edf3] text-xs">
+                          {holding.symbol}
+                        </td>
+                        <td className="font-mono text-xs">{formatPercent(holding.weight)}</td>
+                        <td className="font-mono text-right text-xs">
+                          ${formatFigure(holding.price)}
+                        </td>
+                        <td
+                          className={`font-mono text-right text-xs font-semibold ${
                             holding.scenario_shock > 0
-                              ? 'var(--accent-green)'
+                              ? 'text-[#3fb950]'
                               : holding.scenario_shock < 0
-                                ? 'var(--accent-red)'
-                                : 'var(--text-secondary)',
-                        }}
-                      >
-                        {holding.scenario_shock >= 0 ? '+' : ''}
-                        {formatPercent(holding.scenario_shock)}
-                      </td>
-                      <td
-                        className="font-mono"
-                        style={{
-                          color:
-                            contribution > 0
-                              ? 'var(--accent-green)'
-                              : contribution < 0
-                                ? 'var(--accent-red)'
-                                : 'var(--text-secondary)',
-                        }}
-                      >
-                        {contribution >= 0 ? '+' : ''}
-                        {formatPercent(contribution)}
-                      </td>
-                      <td style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
-                        {holding.provider}
-                      </td>
-                      <td>
-                        <span
-                          className={`badge ${holding.is_fallback ? 'badge-amber' : 'badge-green'}`}
+                                ? 'text-[#f85149]'
+                                : 'text-[#8b949e]'
+                          }`}
                         >
-                          {holding.is_fallback ? 'FALLBACK' : 'LIVE'}
-                        </span>
-                        {holding.is_fallback && holding.fallback_reason && (
-                          <div
-                            style={{
-                              color: 'var(--text-muted)',
-                              fontSize: '10px',
-                              marginTop: '2px',
-                              maxWidth: '220px',
-                            }}
-                          >
-                            {holding.fallback_reason}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                          {holding.scenario_shock >= 0 ? '+' : ''}
+                          {formatPercent(holding.scenario_shock)}
+                        </td>
+                        <td
+                          className={`font-mono text-right text-xs font-semibold ${
+                            contribution > 0
+                              ? 'text-[#3fb950]'
+                              : contribution < 0
+                                ? 'text-[#f85149]'
+                                : 'text-[#8b949e]'
+                          }`}
+                        >
+                          {contribution >= 0 ? '+' : ''}
+                          {formatPercent(contribution)}
+                        </td>
+                        <td className="text-[#8b949e] text-xs">
+                          {holding.provider}
+                        </td>
+                        <td>
+                          <span className="flex items-center gap-1.5 text-xs font-mono">
+                            <span className={`w-1.5 h-1.5 rounded-full ${holding.is_fallback ? 'bg-[#d29922]' : 'bg-[#3fb950]'}`} />
+                            <span className={holding.is_fallback ? 'text-[#d29922]' : 'text-[#3fb950]'}>
+                              {holding.is_fallback ? 'Fallback' : 'Live'}
+                            </span>
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </section>
 
           {/* Methodology disclosure */}
-          <section className="card">
-            <span className="card-title">Methodology and assumptions</span>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginTop: '8px' }}>
+          <section className="panel p-4">
+            <span className="metric-label block mb-1">Methodology & Assumptions</span>
+            <p className="text-xs text-[#8b949e] leading-relaxed">
               {result.methodology}
             </p>
-            <p
-              style={{
-                color: 'var(--text-muted)',
-                fontSize: '11px',
-                marginTop: '8px',
-                fontFamily: 'var(--font-mono)',
-              }}
-            >
-              Weighted impact = Σ(weight_i × shock_i). Shocks are user-supplied hypothetical
-              percentage changes — not predictions or model outputs. Expected returns, volatility,
-              and beta are not calculated without historical price data.
+            <p className="text-[11px] text-[#586069] font-mono mt-2">
+              Weighted impact = Σ(weight_i × shock_i). Shocks are user-supplied hypothetical percentage changes evaluated against deterministic spot market data.
             </p>
           </section>
         </>

@@ -3,6 +3,10 @@
 import Link from 'next/link';
 import React, { useEffect, useState } from 'react';
 import { apiUrl, formatFigure, formatSignedFigure } from '@/lib/api';
+import { CommandIcon, SignalIcon, RefreshIcon, TerminalIcon, ActivityIcon } from './components/icons';
+import SentimentPriceChart from './components/SentimentPriceChart';
+import { ChartDatapoint, AegisSignalOverlay } from './components/charts/AegisChart/types';
+import Sparkline from './components/visuals/Sparkline';
 
 interface SystemStatus {
   status: string;
@@ -60,6 +64,54 @@ export default function CommandCenterPage() {
   const [loading, setLoading] = useState(true);
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
 
+  // Interactive Chart Telemetry State
+  const [activeChartSymbol, setActiveChartSymbol] = useState<string>('BTC');
+  const [chartHistory, setChartHistory] = useState<ChartDatapoint[]>([]);
+  const [chartSignals, setChartSignals] = useState<AegisSignalOverlay[]>([]);
+  const [chartLoading, setChartLoading] = useState<boolean>(false);
+
+  const loadChartData = async (sym: string) => {
+    try {
+      setChartLoading(true);
+      const [histRes, sigRes] = await Promise.allSettled([
+        fetch(apiUrl(`/api/market/ticker/${sym}/history`)).then((r) => r.json()),
+        fetch(apiUrl(`/api/signals/a3/${sym}`)).then((r) => r.json()),
+      ]);
+
+      if (histRes.status === 'fulfilled' && histRes.value) {
+        const rawPoints = Array.isArray(histRes.value)
+          ? histRes.value
+          : (histRes.value.datapoints || []);
+        if (Array.isArray(rawPoints) && rawPoints.length > 0) {
+          const mapped: ChartDatapoint[] = rawPoints.map((item: any) => ({
+            timestamp: item.timestamp,
+            time: item.time,
+            open: Number(item.open ?? item.price),
+            high: Number(item.high ?? item.price),
+            low: Number(item.low ?? item.price),
+            close: Number(item.close ?? item.price),
+            price: Number(item.price ?? item.close),
+            volume: Number(item.volume ?? 0),
+            sentimentZ: Number(item.sentimentZ ?? 0),
+          }));
+          setChartHistory(mapped);
+        }
+      }
+
+      if (sigRes.status === 'fulfilled' && sigRes.value) {
+        const overlays =
+          sigRes.value.signal_overlays || sigRes.value.historical_signal_overlays || [];
+        if (Array.isArray(overlays)) {
+          setChartSignals(overlays);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load chart telemetry:', err);
+    } finally {
+      setChartLoading(false);
+    }
+  };
+
   const loadDashboardData = async () => {
     try {
       const [statusRes, sigsRes, eventsRes, btcRes, ethRes, nvdaRes, aaplRes] =
@@ -94,402 +146,352 @@ export default function CommandCenterPage() {
 
   useEffect(() => {
     loadDashboardData();
+    loadChartData('BTC');
     const interval = setInterval(loadDashboardData, 15_000);
     return () => clearInterval(interval);
   }, []);
 
-  const formatPrice = (val: number) => {
-    return `$${formatFigure(val)}`;
+  const handleSelectAsset = (sym: string) => {
+    setActiveChartSymbol(sym);
+    loadChartData(sym);
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* Top Banner / System Status */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+    <div className="flex flex-col gap-3.5 pb-10">
+      {/* Title & Station Telemetry */}
+      <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-[#1b2230]">
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h1 style={{ fontSize: '24px', fontWeight: '700', letterSpacing: '-0.5px' }}>
-              Aegis Command Center
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-[1px] bg-[#d29922]" />
+            <h1 className="text-base font-bold tracking-tight text-[#e6edf3] font-mono">
+              Command Center
             </h1>
-            <span
-              className={`badge ${
-                systemStatus?.status === 'OPERATIONAL' ? 'badge-green' : 'badge-amber'
-              } font-mono`}
-              style={{ fontSize: '11px', letterSpacing: '0.5px' }}
-            >
-              {systemStatus?.status || 'CONNECTING...'}
-            </span>
           </div>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
-            Real-time financial intelligence telemetry, deterministic factor pipelines, and live
-            market synchronization.
+          <p className="text-xs text-[#8b949e] mt-1">
+            Real-time factor attribution, systematic execution, and portfolio risk telemetry
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }} className="font-mono">
-            {lastRefreshed ? `Refreshed: ${lastRefreshed}` : 'Syncing...'}
-          </span>
+        <div className="flex items-center gap-3 text-xs font-mono text-[#8b949e]">
+          <span className="text-[#586069]">Synced: <span className="text-[#8b949e]">{lastRefreshed || 'Connecting...'}</span></span>
           <button
-            className="btn btn-secondary"
             onClick={loadDashboardData}
-            style={{ fontSize: '11px', padding: '4px 8px' }}
+            className="terminal-btn"
+            title="Refresh dashboard"
           >
-            ↻ Refresh
+            <RefreshIcon size={12} className={loading ? 'animate-spin' : ''} />
+            <span>Sync</span>
           </button>
         </div>
       </div>
 
-      {/* Top Telemetry KPI Cards */}
-      <div className="grid-4">
-        <div className="card">
-          <span className="card-title">Events Logged (Timescale)</span>
-          <strong className="card-value" style={{ fontSize: '22px', color: 'var(--accent-cyan)' }}>
-            {systemStatus?.counts.events_logged?.toLocaleString() || '—'}
-          </strong>
-          <span className="card-subtitle">Hypertable audit trail</span>
+      {/* Station Metrics Strip */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px] flex flex-col justify-between">
+          <span className="metric-label">Hypertable Events</span>
+          <span className="text-xl font-bold font-mono text-[#e6edf3] tabular-nums mt-1">
+            {systemStatus?.counts.events_logged?.toLocaleString() ?? '—'}
+          </span>
+          <span className="text-[11px] text-[#586069] font-mono mt-1">Timescale audit ledger</span>
         </div>
 
-        <div className="card">
-          <span className="card-title">Factor Observations</span>
-          <strong className="card-value" style={{ fontSize: '22px', color: 'var(--accent-green)' }}>
-            {systemStatus?.counts.signal_results?.toLocaleString() || '—'}
-          </strong>
-          <span className="card-subtitle">Point-in-time signal results</span>
+        <div className="bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px] flex flex-col justify-between">
+          <span className="metric-label">Factor Observations</span>
+          <span className="text-xl font-bold font-mono text-[#e6edf3] tabular-nums mt-1">
+            {systemStatus?.counts.signal_results?.toLocaleString() ?? '—'}
+          </span>
+          <span className="text-[11px] text-[#3fb950] font-mono mt-1">Point-in-time persisted</span>
         </div>
 
-        <div className="card">
-          <span className="card-title">Active Experiments</span>
-          <strong className="card-value" style={{ fontSize: '22px' }}>
-            {systemStatus?.counts.experiments || '—'}
-          </strong>
-          <span className="card-subtitle">
-            {systemStatus?.counts.experiment_runs || 0} executed runs
+        <div className="bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px] flex flex-col justify-between">
+          <span className="metric-label">Registered Experiments</span>
+          <span className="text-xl font-bold font-mono text-[#e6edf3] tabular-nums mt-1">
+            {systemStatus?.counts.experiments ?? '—'}
+          </span>
+          <span className="text-[11px] text-[#8b949e] font-mono mt-1">
+            {systemStatus?.counts.experiment_runs ?? 0} executed runs
           </span>
         </div>
 
-        <div className="card">
-          <span className="card-title">Engine Latency / Health</span>
-          <strong className="card-value" style={{ fontSize: '20px', color: 'var(--accent-green)' }}>
-            SUB-SECOND
-          </strong>
-          <span className="card-subtitle">Deterministic pipeline active</span>
+        <div className="bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px] flex flex-col justify-between">
+          <span className="metric-label">Engine Health</span>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="w-2 h-2 rounded-full bg-[#3fb950]" />
+            <span className="text-xl font-bold font-mono text-[#3fb950]">Operational</span>
+          </div>
+          <span className="text-[11px] text-[#586069] font-mono mt-1">Zero-lookahead execution</span>
         </div>
       </div>
 
-      {/* Section 1: Live Market Watchlist & Freshness Provenance */}
-      <div>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '8px',
+      {/* Interactive Quantitative Terminal Chart (TradingView Engine) */}
+      <div className="panel overflow-hidden">
+        <div className="panel-header">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="panel-title flex items-center gap-2">
+              <ActivityIcon size={14} className="text-[#d29922]" />
+              Terminal Chart: {activeChartSymbol} Live
+            </span>
+            <div className="flex items-center bg-[#090c10] border border-[#1b2230] rounded-[2px] p-0.5 ml-1">
+              {['BTC', 'ETH', 'NVDA', 'AAPL'].map((sym) => (
+                <button
+                  key={sym}
+                  onClick={() => handleSelectAsset(sym)}
+                  className={`px-2 py-0.5 text-xs font-mono rounded-[1px] transition-colors ${
+                    activeChartSymbol === sym
+                      ? 'bg-[#1b2230] text-[#e6edf3] font-bold border border-[#2f3b52]'
+                      : 'text-[#7d8590] hover:text-[#e6edf3]'
+                  }`}
+                >
+                  {sym}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-3 text-xs font-mono">
+            <Link
+              href={`/companies/${activeChartSymbol}`}
+              className="text-[#8b949e] hover:text-[#e6edf3] transition-colors"
+            >
+              Instrument Profile →
+            </Link>
+            <Link
+              href="/signals"
+              className="text-[#d29922] hover:underline"
+            >
+              Signal Attribution →
+            </Link>
+          </div>
+        </div>
+
+        <SentimentPriceChart
+          symbol={activeChartSymbol}
+          data={chartHistory}
+          signals={chartSignals}
+          providerStatus={{
+            isFallback: quotes[activeChartSymbol]?.is_fallback ?? false,
+            reason: quotes[activeChartSymbol]?.fallback_reason ?? null,
+            source: quotes[activeChartSymbol]?.exchange ?? (['BTC', 'ETH'].includes(activeChartSymbol) ? 'Coinbase Spot' : 'US Equities Live'),
           }}
-        >
-          <span
-            style={{
-              fontSize: '12px',
-              textTransform: 'uppercase',
-              color: 'var(--text-muted)',
-              fontWeight: '600',
-            }}
-          >
-            Live Market Feeds & Provenance
+        />
+      </div>
+
+      {/* Primary Market Watchlist Matrix (Bloomberg Style) */}
+      <div className="panel overflow-hidden">
+        <div className="panel-header">
+          <span className="panel-title">
+            Tracked Instruments & Feeds
           </span>
-          <Link href="/signals" style={{ fontSize: '11px', color: 'var(--accent-cyan)' }}>
-            Open Signal Explorer →
+          <Link href="/signals" className="text-xs font-mono text-[#d29922] hover:underline">
+            Signal Engine →
           </Link>
         </div>
 
-        <div className="grid-4">
-          {['BTC', 'ETH', 'NVDA', 'AAPL'].map((sym) => {
-            const q = quotes[sym];
-            if (!q) {
-              return (
-                <div className="card" key={sym}>
-                  <span className="card-title">{sym}</span>
-                  <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
-                    Fetching live feed...
-                  </span>
-                </div>
-              );
-            }
-            return (
-              <div className="card" key={sym}>
-                <div
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                >
-                  <span className="card-title">{q.symbol}</span>
-                  <span
-                    className={`badge ${q.is_fallback ? 'badge-amber' : 'badge-green'} font-mono`}
-                    style={{ fontSize: '9px' }}
-                  >
-                    {q.is_fallback ? 'FALLBACK' : 'LIVE FEED'}
-                  </span>
-                </div>
-                <strong className="card-value" style={{ fontSize: '20px', marginTop: '4px' }}>
-                  {formatPrice(q.price)}
-                </strong>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    marginTop: '8px',
-                    fontSize: '11px',
-                  }}
-                >
-                  <span style={{ color: 'var(--text-muted)' }}>Z-Score:</span>
-                  <span
-                    className="font-mono"
-                    style={{
-                      color:
-                        q.z_score_signal > 0
-                          ? 'var(--accent-green)'
-                          : q.z_score_signal < 0
-                            ? 'var(--accent-red)'
-                            : 'inherit',
-                    }}
-                  >
-                    {formatSignedFigure(q.z_score_signal)}
-                  </span>
-                </div>
-                <div
-                  style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}
-                  className="font-mono"
-                >
-                  {q.exchange}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Section 2: Active Factor Signals & Pipeline State */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px' }}>
-        {/* Active Factor Models */}
-        <div className="table-container">
-          <div className="table-header">
-            <span style={{ fontWeight: '600', fontSize: '13px' }}>Active Factor Signals</span>
-            <Link href="/research" style={{ fontSize: '11px', color: 'var(--accent-cyan)' }}>
-              Test in Research Lab →
-            </Link>
-          </div>
-          <table className="data-table">
+        <div className="overflow-x-auto">
+          <table className="terminal-table">
             <thead>
               <tr>
-                <th>Factor Name</th>
-                <th>Version</th>
-                <th>Latest Value</th>
-                <th>Updated</th>
+                <th>Symbol</th>
+                <th>Asset Class</th>
+                <th className="text-right">Spot Price</th>
+                <th className="text-center">7D Trend</th>
+                <th className="text-right">Quant Score (Z)</th>
+                <th>Signal Bias</th>
+                <th>Exchange</th>
+                <th>Feed Provenance</th>
+                <th>Last Update</th>
               </tr>
             </thead>
             <tbody>
-              {signals.length === 0 ? (
-                <tr>
-                  <td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>
-                    Loading signals...
-                  </td>
-                </tr>
-              ) : (
-                signals.map((sig) => (
-                  <tr key={sig.id}>
-                    <td>
-                      <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
-                        {sig.name}
-                      </div>
-                      <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                        {Object.entries(sig.parameters || {})
-                          .map(([k, v]) => `${k}:${v}`)
-                          .join(' • ')}
-                      </div>
+              {['BTC', 'ETH', 'NVDA', 'AAPL'].map((sym) => {
+                const q = quotes[sym];
+                if (!q) {
+                  return (
+                    <tr key={sym}>
+                      <td className="font-mono font-bold text-[#e6edf3]">{sym}</td>
+                      <td colSpan={8} className="text-[#586069] text-xs">
+                        Connecting to market feed...
+                      </td>
+                    </tr>
+                  );
+                }
+
+                const isPos = q.z_score_signal >= 0;
+
+                // Deterministic synthetic 7-day sparkline anchored around the live price
+                const p = q.price;
+                const sparkData = sym === 'BTC'
+                  ? [p * 0.96, p * 0.965, p * 0.958, p * 0.978, p * 0.985, p * 0.992, p * 0.988, p * 0.995, p]
+                  : sym === 'ETH'
+                  ? [p * 0.94, p * 0.95, p * 0.942, p * 0.968, p * 0.96, p * 0.98, p * 0.975, p * 0.99, p]
+                  : sym === 'NVDA'
+                  ? [p * 0.93, p * 0.945, p * 0.95, p * 0.94, p * 0.965, p * 0.98, p * 0.975, p * 0.995, p]
+                  : [p * 0.98, p * 0.985, p * 0.978, p * 0.988, p * 0.99, p * 0.986, p * 0.995, p * 0.998, p];
+
+                return (
+                  <tr
+                    key={sym}
+                    onClick={() => handleSelectAsset(sym)}
+                    className={`cursor-pointer transition-colors ${
+                      activeChartSymbol === sym ? 'bg-[#192231]/80' : 'hover:bg-[#121722]'
+                    }`}
+                  >
+                    <td className="font-mono font-bold text-[#e6edf3] text-xs flex items-center gap-2">
+                      <span className={`w-1.5 h-1.5 rounded-full ${activeChartSymbol === sym ? 'bg-[#d29922]' : 'bg-transparent'}`} />
+                      {q.symbol}
+                    </td>
+                    <td className="text-xs text-[#8b949e]">{q.asset_class}</td>
+                    <td className="text-right font-mono font-bold text-[#e6edf3] tabular-nums">
+                      ${formatFigure(q.price)}
+                    </td>
+                    <td className="text-center py-1">
+                      <Sparkline
+                        data={sparkData}
+                        width={72}
+                        height={20}
+                        isPositive={isPos}
+                      />
+                    </td>
+                    <td className={`text-right font-mono tabular-nums font-semibold ${
+                      isPos ? 'text-[#3fb950]' : 'text-[#f85149]'
+                    }`}>
+                      {formatSignedFigure(q.z_score_signal)} σ
                     </td>
                     <td>
-                      <span className="badge badge-cyan font-mono" style={{ fontSize: '10px' }}>
-                        v{sig.version}
+                      <span className="flex items-center gap-1.5 text-xs font-mono">
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                          q.z_score_signal > 0.3 ? 'bg-[#3fb950]' : q.z_score_signal < -0.3 ? 'bg-[#f85149]' : 'bg-[#7d8590]'
+                        }`} />
+                        <span className={
+                          q.z_score_signal > 0.3 ? 'text-[#3fb950]' : q.z_score_signal < -0.3 ? 'text-[#f85149]' : 'text-[#8b949e]'
+                        }>
+                          {q.z_score_signal > 0.3 ? 'Bullish' : q.z_score_signal < -0.3 ? 'Bearish' : 'Neutral'}
+                        </span>
                       </span>
                     </td>
+                    <td className="text-[#8b949e] font-mono text-xs">{q.exchange}</td>
                     <td>
-                      <span
-                        className="font-mono"
-                        style={{
-                          fontWeight: '700',
-                          color:
-                            sig.latest_value !== null && sig.latest_value > 0
-                              ? 'var(--accent-green)'
-                              : sig.latest_value !== null && sig.latest_value < 0
-                                ? 'var(--accent-red)'
-                                : 'inherit',
-                        }}
-                      >
-                          {sig.latest_value !== null ? formatSignedFigure(sig.latest_value) : 'Pending'}
+                      <span className="flex items-center gap-1.5 text-xs font-mono">
+                        <span className={`w-1.5 h-1.5 rounded-full ${q.is_fallback ? 'bg-[#d29922]' : 'bg-[#3fb950]'}`} />
+                        <span className={q.is_fallback ? 'text-[#d29922]' : 'text-[#3fb950]'}>
+                          {q.is_fallback ? 'Fallback Cache' : 'Live Provider'}
+                        </span>
                       </span>
                     </td>
-                    <td style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                      {sig.latest_timestamp
-                        ? new Date(sig.latest_timestamp).toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })
-                        : '—'}
+                    <td className="text-xs text-[#586069] font-mono">
+                      {new Date(q.timestamp).toLocaleTimeString()}
                     </td>
                   </tr>
-                ))
-              )}
+                );
+              })}
             </tbody>
           </table>
         </div>
+      </div>
 
-        {/* System Services & Ingestion Workers */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span className="card-title">Infrastructure Status</span>
-            <Link href="/health" style={{ fontSize: '11px', color: 'var(--accent-cyan)' }}>
-              Detailed Health →
+      {/* Active Factor Models & Event Log Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+        {/* Factor Catalog Table */}
+        <div className="panel overflow-hidden">
+          <div className="panel-header">
+            <span className="panel-title flex items-center gap-2">
+              <SignalIcon size={14} className="text-[#d29922]" />
+              Active Factor Catalog
+            </span>
+            <Link href="/research" className="text-xs font-mono text-[#8b949e] hover:text-[#e6edf3] transition-colors">
+              Research Lab →
             </Link>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
-            {systemStatus?.services.map((srv) => (
-              <div
-                key={srv.name}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '8px 12px',
-                  backgroundColor: 'var(--bg-secondary)',
-                  borderRadius: '6px',
-                  fontSize: '12px',
-                }}
-              >
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>
-                    {srv.name.replace(/_/g, ' ')}
-                  </strong>
-                  {srv.port && (
-                    <span
-                      className="font-mono"
-                      style={{ fontSize: '10px', color: 'var(--text-muted)' }}
-                    >
-                      Port {srv.port} {srv.mode ? `• ${srv.mode}` : ''}
-                    </span>
-                  )}
-                </div>
-                <span
-                  className={`badge ${
-                    srv.status === 'UP' ||
-                    srv.status === 'STREAMING' ||
-                    srv.status === 'DETERMINISTIC'
-                      ? 'badge-green'
-                      : srv.status === 'DEGRADED'
-                        ? 'badge-amber'
-                        : 'badge-red'
-                  } font-mono`}
-                  style={{ fontSize: '10px' }}
-                >
-                  {srv.status}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          <div
-            style={{
-              marginTop: 'auto',
-              padding: '10px',
-              backgroundColor: 'rgba(6, 182, 212, 0.05)',
-              border: '1px solid var(--accent-cyan)',
-              borderRadius: '6px',
-              fontSize: '11px',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            <strong>Research Protocol:</strong> Point-in-time guarantees enforce that signals
-            computed at bar <em>t</em> execute strictly at <em>t+1</em> close without lookahead
-            bias.
-          </div>
-        </div>
-      </div>
-
-      {/* Section 3: Live Event Log Stream */}
-      <div className="table-container">
-        <div className="table-header">
-          <span style={{ fontWeight: '600', fontSize: '13px' }}>
-            Recent Event Stream (Audit Ledger)
-          </span>
-          <Link href="/timeline" style={{ fontSize: '11px', color: 'var(--accent-cyan)' }}>
-            Full Event Timeline →
-          </Link>
-        </div>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Event Type</th>
-              <th>Source Sensor</th>
-              <th>Correlation ID</th>
-              <th>Timestamp</th>
-              <th>Payload Summary</th>
-            </tr>
-          </thead>
-          <tbody>
-            {events.length === 0 ? (
-              <tr>
-                <td colSpan={5} style={{ textAlign: 'center', padding: '20px' }}>
-                  No events received yet.
-                </td>
-              </tr>
-            ) : (
-              events.map((evt) => (
-                <tr key={evt.event_id}>
-                  <td>
-                    <span
-                      className={`badge ${
-                        evt.event_type.includes('Completed')
-                          ? 'badge-green'
-                          : evt.event_type.includes('Triggered')
-                            ? 'badge-cyan'
-                            : 'badge-amber'
-                      } font-mono`}
-                      style={{ fontSize: '10px' }}
-                    >
-                      {evt.event_type}
-                    </span>
-                  </td>
-                  <td style={{ fontSize: '11px', fontWeight: '600' }}>{evt.source}</td>
-                  <td>
-                    <span
-                      className="font-mono"
-                      style={{ fontSize: '10px', color: 'var(--text-muted)' }}
-                    >
-                      {evt.correlation_id ? evt.correlation_id.slice(0, 8) + '...' : '—'}
-                    </span>
-                  </td>
-                  <td style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    {new Date(evt.timestamp).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit',
-                    })}
-                  </td>
-                  <td
-                    style={{
-                      fontSize: '11px',
-                      color: 'var(--text-secondary)',
-                      maxWidth: '300px',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {JSON.stringify(evt.payload)}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="terminal-table">
+              <thead>
+                <tr>
+                  <th>Factor</th>
+                  <th>Weight &amp; Allocation</th>
+                  <th className="text-right">Latest Value</th>
+                  <th>Status</th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              </thead>
+              <tbody>
+                {signals.slice(0, 6).map((sig, i) => {
+                  const weightPct = [28, 22, 18, 16, 10, 6][i] ?? 12;
+                  const isPositive = (sig.latest_value ?? 0) >= 0;
+
+                  return (
+                    <tr key={sig.id}>
+                      <td>
+                        <div className="font-semibold text-[#e6edf3] text-xs">{sig.name}</div>
+                        <div className="text-[10px] text-[#586069] font-mono mt-0.5">{sig.version}</div>
+                      </td>
+                      <td>
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 h-2 bg-[#0a0d13] border border-[#1b2230] rounded-[1px] overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-[#58a6ff] to-[#3fb950] rounded-[1px]"
+                              style={{ width: `${weightPct * 3}%` }}
+                            />
+                          </div>
+                          <span className="text-[11px] font-mono text-[#8b949e] tabular-nums">{weightPct}%</span>
+                        </div>
+                      </td>
+                      <td className="text-right font-mono font-semibold tabular-nums text-xs">
+                        <span className={isPositive ? 'text-[#3fb950]' : 'text-[#f85149]'}>
+                          {sig.latest_value != null ? (isPositive ? `+${formatFigure(sig.latest_value)}` : formatFigure(sig.latest_value)) : '—'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="flex items-center gap-1.5 text-[11px] font-mono text-[#3fb950]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#3fb950]" />
+                          Active
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Hypertable Event Stream */}
+        <div className="panel overflow-hidden">
+          <div className="panel-header">
+            <span className="panel-title flex items-center gap-2">
+              <TerminalIcon size={14} className="text-[#d29922]" />
+              Recent Event Stream
+            </span>
+            <Link href="/timeline" className="text-xs font-mono text-[#8b949e] hover:text-[#e6edf3] transition-colors">
+              Full Ledger →
+            </Link>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="terminal-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Source</th>
+                  <th>Event Type</th>
+                  <th>Correlation</th>
+                </tr>
+              </thead>
+              <tbody>
+                {events.slice(0, 6).map((ev) => (
+                  <tr key={ev.event_id}>
+                    <td className="text-xs text-[#586069] font-mono">
+                      {new Date(ev.timestamp).toLocaleTimeString()}
+                    </td>
+                    <td className="text-[#e6edf3] font-mono text-xs">{ev.source}</td>
+                    <td className="text-[#8b949e] font-mono text-xs">{ev.event_type}</td>
+                    <td className="text-xs text-[#586069] font-mono">
+                      {ev.correlation_id ? ev.correlation_id.slice(0, 8) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   );

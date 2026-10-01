@@ -3,13 +3,10 @@ import { fetchMarketTickerHistory } from '@/server/market';
 import { aegisStore } from '@/server/store';
 import { evaluateA3AdaptiveAlpha } from '@/server/a3Engine';
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ symbol: string }> }
-) {
+export async function GET(request: NextRequest) {
   try {
-    const { symbol } = await params;
-    const cleanSymbol = (symbol || 'BTC').toUpperCase().trim();
+    const { searchParams } = new URL(request.url);
+    const cleanSymbol = (searchParams.get('symbol') || 'BTC').toUpperCase().trim();
 
     const history = await fetchMarketTickerHistory(cleanSymbol);
     const candles = history.datapoints;
@@ -54,11 +51,12 @@ export async function GET(
     return NextResponse.json({
       ...evaluation,
       signal_overlays: signalOverlays,
+      historical_signal_overlays: signalOverlays,
     });
   } catch (error: any) {
     console.error('Error computing A3 signal evaluation:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to compute A3 Adaptive Alpha evaluation' },
+      { error: 'Failed to evaluate signal', detail: error?.message },
       { status: 500 }
     );
   }

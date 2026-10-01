@@ -49,12 +49,11 @@ interface Props {
 const TIMEFRAMES: Timeframe[] = ['1m', '5m', '15m', '30m', '1h', '4h', '1D', '1W', '1M'];
 const RANGES: RangeShortcut[] = ['1D', '1W', '1M', '3M', '6M', '1Y', '5Y', 'MAX'];
 const INK_COLORS = [
-  { id: '#00e5ff', label: 'Cyan' },
-  { id: '#f59e0b', label: 'Gold' },
-  { id: '#10b981', label: 'Green' },
-  { id: '#f43f5e', label: 'Rose' },
-  { id: '#a855f7', label: 'Purple' },
-  { id: '#eab308', label: 'Yellow' },
+  { id: '#e3b341', label: 'Gold' },
+  { id: '#3fb950', label: 'Green' },
+  { id: '#f85149', label: 'Red' },
+  { id: '#58a6ff', label: 'Blue' },
+  { id: '#bc8cff', label: 'Purple' },
   { id: '#ffffff', label: 'White' },
 ];
 
@@ -65,7 +64,7 @@ export default function ChartToolbar({
   chartType,
   showVolume,
   activeDrawingTool,
-  drawingColor = '#00e5ff',
+  drawingColor = '#e3b341',
   drawingLineWidth = 2,
   activeDrawingsCount = 0,
   drawings = [],
@@ -96,175 +95,112 @@ export default function ChartToolbar({
   const [showColorMenu, setShowColorMenu] = React.useState(false);
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 8,
-        padding: '8px 12px',
-        background: '#0d121c',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-        fontSize: 12,
-        fontFamily: 'var(--font-mono, monospace)',
-        color: '#94a3b8',
-        flexWrap: 'wrap',
-      }}
-    >
-      {/* Timeframe selector */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <span style={{ fontWeight: 600, color: '#f8fafc', marginRight: 6 }}>{symbol}</span>
-        {TIMEFRAMES.map((tf) => (
-          <button
-            key={tf}
-            onClick={() => onTimeframeChange(tf)}
-            style={{
-              background: timeframe === tf ? 'rgba(0, 229, 255, 0.15)' : 'transparent',
-              color: timeframe === tf ? '#00e5ff' : '#94a3b8',
-              border: `1px solid ${timeframe === tf ? 'rgba(0, 229, 255, 0.4)' : 'transparent'}`,
-              borderRadius: 4,
-              padding: '2px 6px',
-              cursor: 'pointer',
-              fontWeight: timeframe === tf ? 600 : 400,
-            }}
-          >
-            {tf}
-          </button>
-        ))}
+    <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-[#0e1117] border-b border-[#1b2230] text-[11px] font-mono text-[#8b949e] flex-wrap">
+      {/* Timeframe Selector (Compact Segmented Control) */}
+      <div className="flex items-center gap-1">
+        <span className="font-bold text-[#e6edf3] mr-1.5 text-xs">{symbol}</span>
+        <div className="flex items-center bg-[#131722] border border-[#1f2633] rounded-[2px] p-0.5">
+          {TIMEFRAMES.map((tf) => (
+            <button
+              key={tf}
+              onClick={() => onTimeframeChange(tf)}
+              className={`px-1.5 py-0.5 rounded-[1px] transition-colors ${
+                timeframe === tf
+                  ? 'bg-[#1e2638] text-[#e6edf3] font-bold border border-[#2f3b52]'
+                  : 'text-[#7d8590] hover:text-[#c9d1d9] border border-transparent'
+              }`}
+            >
+              {tf}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Range shortcuts */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      {/* Range Shortcuts */}
+      <div className="hidden md:flex items-center gap-1 bg-[#131722] border border-[#1f2633] rounded-[2px] p-0.5">
         {RANGES.map((r) => (
           <button
             key={r}
             onClick={() => onRangeChange(r)}
-            style={{
-              background: range === r ? '#1e293b' : 'transparent',
-              color: range === r ? '#f8fafc' : '#64748b',
-              border: 'none',
-              borderRadius: 3,
-              padding: '2px 5px',
-              cursor: 'pointer',
-            }}
+            className={`px-1.5 py-0.5 rounded-[1px] transition-colors ${
+              range === r
+                ? 'bg-[#1e2638] text-[#e6edf3] font-bold border border-[#2f3b52]'
+                : 'text-[#586069] hover:text-[#c9d1d9] border border-transparent'
+            }`}
           >
             {r}
           </button>
         ))}
       </div>
 
-      {/* Chart Type, Volume, Indicators, Drawings, Aegis Intelligence */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }}>
-        {/* Chart Type */}
+      {/* Chart Controls & Overlays */}
+      <div className="flex items-center gap-1.5 relative">
+        {/* Chart Type Selector */}
         <select
           value={chartType}
           onChange={(e) => onChartTypeChange(e.target.value as ChartType)}
-          style={{
-            background: '#121824',
-            color: '#f8fafc',
-            border: '1px solid rgba(255,255,255,0.12)',
-            borderRadius: 4,
-            padding: '2px 6px',
-            cursor: 'pointer',
-            outline: 'none',
-          }}
+          className="bg-[#131722] text-[#c9d1d9] border border-[#1f2633] rounded-[2px] px-2 py-1 text-[11px] outline-none hover:border-[#2f3b52] cursor-pointer"
         >
           <option value="candles">Candles</option>
-          <option value="ohlc">OHLC Bars</option>
+          <option value="ohlc">OHLC</option>
           <option value="line">Line</option>
           <option value="area">Area</option>
         </select>
 
-        {/* Volume toggle */}
+        {/* Volume Toggle */}
         <button
           onClick={onToggleVolume}
-          style={{
-            background: showVolume ? 'rgba(16, 185, 129, 0.15)' : '#121824',
-            color: showVolume ? '#10b981' : '#94a3b8',
-            border: `1px solid ${showVolume ? 'rgba(16, 185, 129, 0.3)' : 'rgba(255,255,255,0.08)'}`,
-            borderRadius: 4,
-            padding: '2px 8px',
-            cursor: 'pointer',
-          }}
+          className={`px-2 py-1 rounded-[2px] border transition-colors ${
+            showVolume
+              ? 'bg-[#162a1e] text-[#3fb950] border-[#234b30] font-semibold'
+              : 'bg-[#131722] text-[#7d8590] border-[#1f2633] hover:border-[#2f3b52]'
+          }`}
         >
-          Vol
+          VOL
         </button>
 
         {/* Indicators Dropdown */}
-        <div style={{ position: 'relative' }}>
+        <div className="relative">
           <button
             onClick={() => setShowIndicatorMenu((prev) => !prev)}
-            style={{
-              background: '#121824',
-              color: '#f8fafc',
-              border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: 4,
-              padding: '2px 8px',
-              cursor: 'pointer',
-            }}
+            className="px-2 py-1 bg-[#131722] text-[#c9d1d9] border border-[#1f2633] hover:border-[#2f3b52] rounded-[2px] cursor-pointer"
           >
-            Indicators ▼
+            Indicators ▾
           </button>
           {showIndicatorMenu && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '100%',
-                right: 0,
-                marginTop: 4,
-                background: '#121824',
-                border: '1px solid rgba(255,255,255,0.16)',
-                borderRadius: 6,
-                padding: 8,
-                zIndex: 100,
-                minWidth: 160,
-                boxShadow: '0 8px 16px rgba(0,0,0,0.5)',
-              }}
-            >
-              <div style={{ fontSize: 10, textTransform: 'uppercase', color: '#64748b', marginBottom: 4 }}>
-                Overlays
+            <div className="absolute top-full right-0 mt-1 bg-[#131722] border border-[#2b3548] rounded-[3px] p-2.5 z-50 min-w-[160px] shadow-2xl">
+              <div className="text-[10px] uppercase font-bold text-[#586069] mb-1.5 tracking-wider">
+                Trend Overlays
               </div>
               {(['sma', 'ema', 'vwap', 'bollinger'] as IndicatorId[]).map((id) => (
                 <label
                   key={id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '3px 0',
-                    cursor: 'pointer',
-                    color: indicators[id]?.enabled ? '#00e5ff' : '#94a3b8',
-                  }}
+                  className="flex items-center gap-2 py-1 cursor-pointer text-[#8b949e] hover:text-[#e6edf3]"
                 >
                   <input
                     type="checkbox"
                     checked={indicators[id]?.enabled ?? false}
                     onChange={() => onToggleIndicator(id)}
+                    className="accent-[#d29922]"
                   />
-                  {id.toUpperCase()}
+                  <span className="uppercase text-[11px]">{id}</span>
                 </label>
               ))}
-              <div style={{ fontSize: 10, textTransform: 'uppercase', color: '#64748b', marginTop: 8, marginBottom: 4 }}>
-                Panes
+              <div className="text-[10px] uppercase font-bold text-[#586069] mt-2 mb-1.5 tracking-wider border-t border-[#1f2633] pt-1.5">
+                Oscillators
               </div>
               {(['rsi', 'macd', 'atr', 'momentum', 'stochastic'] as IndicatorId[]).map((id) => (
                 <label
                   key={id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '3px 0',
-                    cursor: 'pointer',
-                    color: indicators[id]?.enabled ? '#00e5ff' : '#94a3b8',
-                  }}
+                  className="flex items-center gap-2 py-1 cursor-pointer text-[#8b949e] hover:text-[#e6edf3]"
                 >
                   <input
                     type="checkbox"
                     checked={indicators[id]?.enabled ?? false}
                     onChange={() => onToggleIndicator(id)}
+                    className="accent-[#d29922]"
                   />
-                  {id.toUpperCase()}
+                  <span className="uppercase text-[11px]">{id}</span>
                 </label>
               ))}
             </div>
@@ -272,80 +208,42 @@ export default function ChartToolbar({
         </div>
 
         {/* Drawings Dropdown */}
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div className="relative flex items-center gap-1">
           <button
             onClick={() => setShowDrawMenu((prev) => !prev)}
-            style={{
-              background: activeDrawingTool !== 'cursor' ? 'rgba(0, 229, 255, 0.15)' : '#121824',
-              color: activeDrawingTool !== 'cursor' ? '#00e5ff' : '#f8fafc',
-              border: `1px solid ${activeDrawingTool !== 'cursor' ? 'rgba(0,229,255,0.4)' : 'rgba(255,255,255,0.12)'}`,
-              borderRadius: 4,
-              padding: '2px 8px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-            }}
+            className={`px-2 py-1 rounded-[2px] border transition-colors flex items-center gap-1.5 ${
+              activeDrawingTool !== 'cursor'
+                ? 'bg-[#1b2538] text-[#e6edf3] border-[#384869]'
+                : 'bg-[#131722] text-[#c9d1d9] border-[#1f2633] hover:border-[#2f3b52]'
+            }`}
           >
-            <span>Tool: {activeDrawingTool.toUpperCase()}</span>
+            <span>Draw: {activeDrawingTool.toUpperCase()}</span>
             {activeDrawingsCount > 0 && (
-              <span
-                style={{
-                  background: '#00e5ff',
-                  color: '#080a0f',
-                  fontSize: 10,
-                  fontWeight: 700,
-                  borderRadius: 8,
-                  padding: '0 5px',
-                  lineHeight: '14px',
-                }}
-              >
+              <span className="bg-[#d29922] text-[#080a0d] text-[9px] font-bold px-1 rounded-[1px] leading-3">
                 {activeDrawingsCount}
               </span>
             )}
-            <span>▼</span>
+            <span>▾</span>
           </button>
+
           {activeDrawingsCount > 0 && (
             <button
               onClick={onResetDrawings}
-              title="Clear all active drawings from chart"
-              style={{
-                background: 'rgba(244, 63, 94, 0.15)',
-                color: '#f43f5e',
-                border: '1px solid rgba(244, 63, 94, 0.3)',
-                borderRadius: 4,
-                padding: '2px 6px',
-                fontSize: 11,
-                cursor: 'pointer',
-              }}
+              title="Clear all drawings"
+              className="px-1.5 py-1 bg-[#28161a] text-[#f85149] border border-[#482025] hover:bg-[#34181d] rounded-[2px] text-[10px]"
             >
-              Clear ({activeDrawingsCount})
+              Clear
             </button>
           )}
+
           {showDrawMenu && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '100%',
-                right: 0,
-                marginTop: 4,
-                background: '#121824',
-                border: '1px solid rgba(255,255,255,0.16)',
-                borderRadius: 6,
-                padding: 8,
-                zIndex: 100,
-                minWidth: 220,
-                maxHeight: 380,
-                overflowY: 'auto',
-                boxShadow: '0 8px 16px rgba(0,0,0,0.5)',
-              }}
-            >
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 4, paddingLeft: 4 }}>
-                Modes
+            <div className="absolute top-full right-0 mt-1 bg-[#131722] border border-[#2b3548] rounded-[3px] p-2 z-50 min-w-[200px] max-h-[360px] overflow-y-auto shadow-2xl">
+              <div className="text-[10px] font-bold text-[#586069] uppercase mb-1 tracking-wider px-1">
+                Navigation
               </div>
               {[
-                { id: 'cursor', label: '✋ Cursor (Pan & Zoom Chart)' },
-                { id: 'select', label: '↖ Select / Edit Drawings' },
+                { id: 'cursor', label: 'Cursor (Pan & Zoom)' },
+                { id: 'select', label: 'Select / Edit' },
               ].map((tool) => (
                 <div
                   key={tool.id}
@@ -353,33 +251,29 @@ export default function ChartToolbar({
                     onSelectDrawingTool(tool.id as DrawingType);
                     setShowDrawMenu(false);
                   }}
-                  style={{
-                    padding: '5px 8px',
-                    borderRadius: 4,
-                    cursor: 'pointer',
-                    fontSize: 12,
-                    background: activeDrawingTool === tool.id ? 'rgba(0,229,255,0.15)' : 'transparent',
-                    color: activeDrawingTool === tool.id ? '#00e5ff' : '#f8fafc',
-                    fontWeight: activeDrawingTool === tool.id ? 600 : 400,
-                  }}
+                  className={`px-2 py-1 rounded-[2px] cursor-pointer text-[11px] ${
+                    activeDrawingTool === tool.id
+                      ? 'bg-[#1e2638] text-[#e6edf3] font-semibold'
+                      : 'text-[#8b949e] hover:bg-[#1a202c] hover:text-[#e6edf3]'
+                  }`}
                 >
                   {tool.label}
                 </div>
               ))}
 
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', margin: '8px 0 4px', paddingLeft: 4 }}>
-                Drawing Tools
+              <div className="text-[10px] font-bold text-[#586069] uppercase mt-2 mb-1 tracking-wider px-1 border-t border-[#1f2633] pt-1.5">
+                Technical Tools
               </div>
               {[
-                { id: 'trendline', label: '╱ Trendline' },
-                { id: 'horizontalLine', label: '― Horizontal Line' },
-                { id: 'verticalLine', label: '┆ Vertical Line' },
-                { id: 'ray', label: '↗ Ray Line' },
-                { id: 'rectangle', label: '▭ Rectangle Box' },
-                { id: 'arrow', label: '➔ Arrow' },
-                { id: 'fibonacci', label: '☰ Fibonacci Retracement' },
-                { id: 'ruler', label: '⤢ Ruler / Measurement' },
-                { id: 'text', label: '🗎 Text Annotation' },
+                { id: 'trendline', label: 'Trendline' },
+                { id: 'horizontalLine', label: 'Horizontal Line' },
+                { id: 'verticalLine', label: 'Vertical Line' },
+                { id: 'ray', label: 'Ray Line' },
+                { id: 'rectangle', label: 'Rectangle Box' },
+                { id: 'arrow', label: 'Arrow' },
+                { id: 'fibonacci', label: 'Fibonacci Retracement' },
+                { id: 'ruler', label: 'Measurement Ruler' },
+                { id: 'text', label: 'Text Note' },
               ].map((tool) => (
                 <div
                   key={tool.id}
@@ -387,258 +281,52 @@ export default function ChartToolbar({
                     onSelectDrawingTool(tool.id as DrawingType);
                     setShowDrawMenu(false);
                   }}
-                  style={{
-                    padding: '4px 8px',
-                    borderRadius: 4,
-                    cursor: 'pointer',
-                    fontSize: 12,
-                    background: activeDrawingTool === tool.id ? 'rgba(0,229,255,0.15)' : 'transparent',
-                    color: activeDrawingTool === tool.id ? '#00e5ff' : '#f8fafc',
-                  }}
+                  className={`px-2 py-1 rounded-[2px] cursor-pointer text-[11px] ${
+                    activeDrawingTool === tool.id
+                      ? 'bg-[#1e2638] text-[#e6edf3] font-semibold'
+                      : 'text-[#8b949e] hover:bg-[#1a202c] hover:text-[#e6edf3]'
+                  }`}
                 >
                   {tool.label}
                 </div>
               ))}
-
-              {(drawings.length > 0 || measurements.length > 0) && (
-                <>
-                  <hr style={{ borderColor: 'rgba(255,255,255,0.08)', margin: '8px 0' }} />
-                  <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 4, paddingLeft: 4 }}>
-                    Active Drawings ({drawings.length + measurements.length})
-                  </div>
-                  {drawings.map((d, idx) => (
-                    <div
-                      key={d.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '3px 6px',
-                        borderRadius: 4,
-                        fontSize: 11,
-                        background: selectedDrawingId === d.id ? 'rgba(0,229,255,0.2)' : 'transparent',
-                      }}
-                    >
-                      <span
-                        onClick={() => {
-                          onSelectDrawingTool('select');
-                          onSelectDrawing?.(d.id);
-                          setShowDrawMenu(false);
-                        }}
-                        style={{ cursor: 'pointer', color: d.style?.color ?? '#00e5ff', display: 'flex', alignItems: 'center', gap: 4 }}
-                      >
-                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: d.style?.color ?? '#00e5ff', display: 'inline-block' }} />
-                        {d.type.charAt(0).toUpperCase() + d.type.slice(1)} #{idx + 1}
-                      </span>
-                      <button
-                        onClick={() => onRemoveDrawing?.(d.id)}
-                        title="Delete drawing"
-                        style={{ background: 'none', border: 'none', color: '#f43f5e', cursor: 'pointer', fontSize: 12, padding: '0 4px' }}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                  {measurements.map((m, idx) => (
-                    <div
-                      key={m.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '3px 6px',
-                        borderRadius: 4,
-                        fontSize: 11,
-                        background: selectedDrawingId === m.id ? 'rgba(0,229,255,0.2)' : 'transparent',
-                      }}
-                    >
-                      <span
-                        onClick={() => {
-                          onSelectDrawingTool('select');
-                          onSelectDrawing?.(m.id);
-                          setShowDrawMenu(false);
-                        }}
-                        style={{ cursor: 'pointer', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: 4 }}
-                      >
-                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#38bdf8', display: 'inline-block' }} />
-                        Ruler #{idx + 1}
-                      </span>
-                      <button
-                        onClick={() => onRemoveMeasurement?.(m.id)}
-                        title="Delete measurement"
-                        style={{ background: 'none', border: 'none', color: '#f43f5e', cursor: 'pointer', fontSize: 12, padding: '0 4px' }}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </>
-              )}
-
-              <hr style={{ borderColor: 'rgba(255,255,255,0.08)', margin: '6px 0' }} />
-              <button
-                onClick={() => {
-                  onResetDrawings();
-                  setShowDrawMenu(false);
-                }}
-                style={{
-                  width: '100%',
-                  textAlign: 'left',
-                  background: 'transparent',
-                  color: '#f43f5e',
-                  border: 'none',
-                  cursor: 'pointer',
-                  padding: '4px 8px',
-                  fontSize: 11,
-                  fontWeight: 600,
-                }}
-              >
-                Clear All Drawings
-              </button>
             </div>
           )}
         </div>
 
-        {/* Ink Color & Stroke Width Dropdown */}
-        <div style={{ position: 'relative' }}>
+        {/* Intelligence Overlays (Segmented group) */}
+        <div className="flex items-center bg-[#131722] border border-[#1f2633] rounded-[2px] p-0.5">
           <button
-            onClick={() => setShowColorMenu((prev) => !prev)}
-            title="Choose Ink Color and Stroke Width"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              background: '#121824',
-              color: '#f8fafc',
-              border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: 4,
-              padding: '2px 8px',
-              cursor: 'pointer',
-            }}
+            onClick={onToggleSignals}
+            className={`px-2 py-0.5 rounded-[1px] transition-colors font-semibold ${
+              showSignals
+                ? 'bg-[#1b2538] text-[#3fb950] border border-[#2f3b52]'
+                : 'text-[#7d8590] hover:text-[#c9d1d9] border border-transparent'
+            }`}
           >
-            <span
-              style={{
-                display: 'inline-block',
-                width: 10,
-                height: 10,
-                borderRadius: '50%',
-                background: drawingColor,
-                boxShadow: `0 0 6px ${drawingColor}`,
-              }}
-            />
-            <span>Ink: {drawingLineWidth}px</span>
-            <span style={{ fontSize: 9 }}>▼</span>
+            Signals
           </button>
-          {showColorMenu && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '100%',
-                right: 0,
-                marginTop: 4,
-                background: '#121824',
-                border: '1px solid rgba(255,255,255,0.16)',
-                borderRadius: 6,
-                padding: 10,
-                zIndex: 100,
-                minWidth: 170,
-                boxShadow: '0 8px 16px rgba(0,0,0,0.5)',
-              }}
-            >
-              <div style={{ fontSize: 10, textTransform: 'uppercase', color: '#64748b', marginBottom: 6 }}>
-                Ink Color
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 10 }}>
-                {INK_COLORS.map((c) => (
-                  <button
-                    key={c.id}
-                    title={c.label}
-                    onClick={() => {
-                      onDrawingColorChange?.(c.id);
-                    }}
-                    style={{
-                      height: 24,
-                      borderRadius: 4,
-                      background: c.id,
-                      border: drawingColor === c.id ? '2px solid #ffffff' : '1px solid rgba(255,255,255,0.2)',
-                      cursor: 'pointer',
-                      outline: 'none',
-                      boxShadow: drawingColor === c.id ? `0 0 8px ${c.id}` : 'none',
-                    }}
-                  />
-                ))}
-              </div>
-
-              <div style={{ fontSize: 10, textTransform: 'uppercase', color: '#64748b', marginBottom: 6 }}>
-                Stroke Width
-              </div>
-              <div style={{ display: 'flex', gap: 4 }}>
-                {[1, 2, 3, 4].map((w) => (
-                  <button
-                    key={w}
-                    onClick={() => {
-                      onDrawingLineWidthChange?.(w);
-                      setShowColorMenu(false);
-                    }}
-                    style={{
-                      flex: 1,
-                      padding: '3px 0',
-                      borderRadius: 4,
-                      cursor: 'pointer',
-                      background: drawingLineWidth === w ? 'rgba(0, 229, 255, 0.2)' : '#1a2234',
-                      color: drawingLineWidth === w ? '#00e5ff' : '#94a3b8',
-                      border: `1px solid ${drawingLineWidth === w ? 'rgba(0, 229, 255, 0.4)' : 'rgba(255,255,255,0.08)'}`,
-                      fontSize: 11,
-                    }}
-                  >
-                    {w}px
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          <button
+            onClick={onToggleEvents}
+            className={`px-2 py-0.5 rounded-[1px] transition-colors font-semibold ${
+              showEvents
+                ? 'bg-[#1b2538] text-[#d29922] border border-[#2f3b52]'
+                : 'text-[#7d8590] hover:text-[#c9d1d9] border border-transparent'
+            }`}
+          >
+            Events
+          </button>
+          <button
+            onClick={onToggleBacktests}
+            className={`px-2 py-0.5 rounded-[1px] transition-colors font-semibold ${
+              showBacktests
+                ? 'bg-[#1b2538] text-[#bc8cff] border border-[#2f3b52]'
+                : 'text-[#7d8590] hover:text-[#c9d1d9] border border-transparent'
+            }`}
+          >
+            Trades
+          </button>
         </div>
-
-        {/* Intelligence Overlays */}
-        <button
-          onClick={onToggleSignals}
-          style={{
-            background: showSignals ? 'rgba(16,185,129,0.15)' : '#121824',
-            color: showSignals ? '#10b981' : '#64748b',
-            border: `1px solid ${showSignals ? 'rgba(16,185,129,0.3)' : 'rgba(255,255,255,0.08)'}`,
-            borderRadius: 4,
-            padding: '2px 6px',
-            cursor: 'pointer',
-          }}
-        >
-          Signals
-        </button>
-        <button
-          onClick={onToggleEvents}
-          style={{
-            background: showEvents ? 'rgba(139,92,246,0.15)' : '#121824',
-            color: showEvents ? '#8b5cf6' : '#64748b',
-            border: `1px solid ${showEvents ? 'rgba(139,92,246,0.3)' : 'rgba(255,255,255,0.08)'}`,
-            borderRadius: 4,
-            padding: '2px 6px',
-            cursor: 'pointer',
-          }}
-        >
-          Events
-        </button>
-        <button
-          onClick={onToggleBacktests}
-          style={{
-            background: showBacktests ? 'rgba(245,158,11,0.15)' : '#121824',
-            color: showBacktests ? '#f59e0b' : '#64748b',
-            border: `1px solid ${showBacktests ? 'rgba(245,158,11,0.3)' : 'rgba(255,255,255,0.08)'}`,
-            borderRadius: 4,
-            padding: '2px 6px',
-            cursor: 'pointer',
-          }}
-        >
-          Trades
-        </button>
       </div>
     </div>
   );

@@ -1031,31 +1031,46 @@ class AegisStore {
     let latestEvaluation: A3SignalEvaluation | null = null;
 
     if (isA3Strategy) {
-      // Dynamic canonical A3 PIT evaluation bar-by-bar
+      // Dynamic canonical A3 PIT evaluation bar-by-bar with Point-In-Time Ridge Regression
       const newsClusters = this.getLatestNews(100);
+      let currentPos = 0.0;
+      let entryBar = 0;
+      let trailingStop = 0.0;
+
       for (let i = 0; i < candles.length; i++) {
         const candlesUpToT = candles.slice(0, i + 1);
-        const evalA3 = evaluateA3AdaptiveAlpha(sym, candlesUpToT, newsClusters);
+        const evalA3 = evaluateA3AdaptiveAlpha(
+          sym,
+          candlesUpToT,
+          newsClusters,
+          undefined,
+          undefined,
+          { position: currentPos, entryBar, trailingStop, currentBarIdx: i }
+        );
         latestEvaluation = evalA3;
 
-        let sigVal = 0.0;
+        const prevPos = currentPos;
+        currentPos = evalA3.recommended_position ?? 0.0;
+        if (evalA3.active_trailing_stop !== undefined) {
+          trailingStop = evalA3.active_trailing_stop;
+        }
+        if (currentPos !== prevPos && currentPos !== 0.0) {
+          entryBar = i;
+        }
+
         if (evalA3.signal_action === 'BUY') {
-          sigVal = 1.0;
           signalDistribution.BUY++;
         } else if (evalA3.signal_action === 'SELL') {
-          sigVal = -1.0;
           signalDistribution.SELL++;
         } else if (evalA3.signal_action === 'WATCH') {
-          sigVal = 0.0;
           signalDistribution.WATCH++;
         } else {
-          sigVal = 0.0;
           signalDistribution.NO_TRADE++;
         }
 
         signalValues.push({
           time: candles[i].time,
-          signal: sigVal,
+          signal: currentPos,
         });
       }
     } else if (signalDef && signalDef.datapoints.length > 0) {
@@ -1094,7 +1109,10 @@ class AegisStore {
     });
 
     const totalBars = candles.length;
-    const exposedBars = signalDistribution.BUY + signalDistribution.SELL;
+    const longBars = signalValues.filter((s) => s.signal > 0).length;
+    const shortBars = signalValues.filter((s) => s.signal < 0).length;
+    const cashBars = signalValues.filter((s) => s.signal === 0).length;
+    const exposedBars = longBars + shortBars;
 
     const methodology = isA3Strategy
       ? 'Dynamic Canonical A³ PIT Evaluation: bar-by-bar feature set construction at t; next-bar close execution at t+1; transaction cost deducted on position transitions.'
@@ -1113,9 +1131,9 @@ class AegisStore {
         total_bars: totalBars,
         eligible_bars: totalBars,
         exposed_bars: exposedBars,
-        long_exposure_pct: Number((signalDistribution.BUY / totalBars).toFixed(4)),
-        short_exposure_pct: Number((signalDistribution.SELL / totalBars).toFixed(4)),
-        cash_pct: Number(((signalDistribution.WATCH + signalDistribution.NO_TRADE) / totalBars).toFixed(4)),
+        long_exposure_pct: Number((longBars / totalBars).toFixed(4)),
+        short_exposure_pct: Number((shortBars / totalBars).toFixed(4)),
+        cash_pct: Number((cashBars / totalBars).toFixed(4)),
         model_version: isA3Strategy ? 'A3-V1.3.0' : signalDef?.version || '1.0.0',
         factor_contributions: latestEvaluation?.factor_contributions || [],
         disagreement_vector: latestEvaluation?.disagreement_vector || null,
@@ -1219,6 +1237,10 @@ class AegisStore {
         },
       },
     };
+  }
+
+  getCanonicalNews(): CanonicalArticleRecord[] {
+    return [...this.canonicalNews];
   }
 
   // News momentum

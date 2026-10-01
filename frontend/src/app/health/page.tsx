@@ -49,176 +49,153 @@ export default function HealthPage() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div className="flex flex-col gap-4 pb-10">
+      {/* Page Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-[#1b2230]">
         <div>
-          <h1 style={{ fontSize: '20px', fontWeight: '700', letterSpacing: '-0.5px' }}>
-            Platform Infrastructure & Health
-          </h1>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
-            Real-time status of TimescaleDB, Redis, ingestion worker streams, and FastAPI runtime.
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-[1px] bg-[#d29922]" />
+            <h1 className="text-base font-bold tracking-tight text-[#e6edf3] font-mono">
+              System Diagnostics
+            </h1>
+          </div>
+          <p className="text-xs text-[#8b949e] mt-1 font-mono">
+            Real-time status of TimescaleDB hypertables, Redis cache, data worker streams, and FastAPI runtime
           </p>
         </div>
-        <button className="btn btn-secondary" onClick={fetchHealth}>
-          Refresh Status
+        <button className="terminal-btn text-xs" onClick={fetchHealth}>
+          Refresh Diagnostics
         </button>
       </div>
 
       {/* Global Status Banner */}
-      <div
-        style={{
-          padding: '16px 20px',
-          backgroundColor: 'var(--bg-card)',
-          border: '1px solid var(--border-color)',
-          borderRadius: '8px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div className="status-pill online">
-            <span className="status-dot"></span>
+      <div className="panel p-4 flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 text-xs font-mono font-bold text-[#3fb950]">
+            <span className="w-2 h-2 rounded-full bg-[#3fb950]" />
             <span>ALL SYSTEMS OPERATIONAL</span>
           </div>
-          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-            Zero critical alerts detected in the last 24 hours.
+          <span className="text-xs text-[#8b949e]">
+            Zero critical pipeline bottlenecks detected.
           </span>
         </div>
-        <span className="font-mono" style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-          Heartbeat:{' '}
-          {status?.timestamp ? new Date(status.timestamp).toLocaleTimeString() : 'Polling...'}
+        <span className="font-mono text-xs text-[#586069]">
+          Heartbeat: {status?.timestamp ? new Date(status.timestamp).toLocaleTimeString() : 'Polling...'}
         </span>
       </div>
 
       {/* Services Grid */}
-      <div className="grid-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {status?.services.map((svc) => (
-          <div key={svc.name} className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span className="card-title">{svc.name.replace('_', ' ')}</span>
-              <span className="badge badge-green font-mono">{svc.status}</span>
+          <div key={svc.name} className="bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px] flex flex-col justify-between gap-2">
+            <div className="flex justify-between items-center">
+              <span className="metric-label">{svc.name.replace('_', ' ')}</span>
+              <span className="flex items-center gap-1.5 text-[11px] font-mono text-[#3fb950]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#3fb950]" />
+                {svc.status}
+              </span>
             </div>
-            <div className="card-value" style={{ fontSize: '18px', color: 'var(--accent-cyan)' }}>
-              {svc.port ? `PORT :${svc.port}` : svc.mode || 'ACTIVE'}
+            <div className="text-sm font-bold font-mono text-[#e6edf3]">
+              {svc.port ? `Port :${svc.port}` : svc.mode || 'Active'}
             </div>
-            <span className="card-subtitle" style={{ color: 'var(--accent-green)' }}>
-              ● Responsive (0 errors)
+            <span className="text-[11px] text-[#586069] font-mono">
+              Responsive (0 errors)
             </span>
           </div>
         ))}
       </div>
 
       {/* Storage and Hypertable Metrics */}
-      <div className="table-container">
-        <div className="table-header">
-          <span style={{ fontWeight: '600', fontSize: '13px' }}>
-            TimescaleDB Hypertables & Table Statistics
-          </span>
-          <span className="badge badge-cyan font-mono">POSTGRES 16</span>
+      <div className="panel overflow-hidden">
+        <div className="panel-header">
+          <span className="panel-title">TimescaleDB Hypertables & Table Statistics</span>
+          <span className="text-xs font-mono text-[#8b949e]">PostgreSQL 16 Engine</span>
         </div>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Table Name</th>
-              <th>Storage Type</th>
-              <th>Partitioning Key</th>
-              <th>Total Records</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td style={{ fontWeight: '600', color: 'var(--text-primary)' }}>signal_results</td>
-              <td>
-                <span className="badge badge-cyan font-mono">HYPERTABLE</span>
-              </td>
-              <td>
-                <span className="font-mono" style={{ fontSize: '12px' }}>
-                  timestamp (UTC)
-                </span>
-              </td>
-              <td className="font-mono" style={{ fontWeight: '600', color: 'var(--accent-green)' }}>
-                {status?.counts.signal_results ?? '—'}
-              </td>
-              <td>
-                <span className="badge badge-green font-mono">ONLINE</span>
-              </td>
-            </tr>
-            <tr>
-              <td style={{ fontWeight: '600', color: 'var(--text-primary)' }}>event_log</td>
-              <td>
-                <span className="badge badge-cyan font-mono">HYPERTABLE</span>
-              </td>
-              <td>
-                <span className="font-mono" style={{ fontSize: '12px' }}>
-                  timestamp (UTC)
-                </span>
-              </td>
-              <td className="font-mono" style={{ fontWeight: '600', color: 'var(--accent-green)' }}>
-                {status?.counts.events_logged ?? '—'}
-              </td>
-              <td>
-                <span className="badge badge-green font-mono">ONLINE</span>
-              </td>
-            </tr>
-            <tr>
-              <td style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
-                signal_definitions
-              </td>
-              <td>
-                <span className="badge badge-amber font-mono">RELATIONAL</span>
-              </td>
-              <td>
-                <span className="font-mono" style={{ fontSize: '12px' }}>
-                  id (UUIDv4)
-                </span>
-              </td>
-              <td className="font-mono" style={{ fontWeight: '600' }}>
-                {status?.counts.signal_definitions ?? '—'}
-              </td>
-              <td>
-                <span className="badge badge-green font-mono">ONLINE</span>
-              </td>
-            </tr>
-            <tr>
-              <td style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
-                experiment_definitions
-              </td>
-              <td>
-                <span className="badge badge-amber font-mono">RELATIONAL</span>
-              </td>
-              <td>
-                <span className="font-mono" style={{ fontSize: '12px' }}>
-                  experiment_id (UUIDv4)
-                </span>
-              </td>
-              <td className="font-mono" style={{ fontWeight: '600' }}>
-                {status?.counts.experiments ?? '—'}
-              </td>
-              <td>
-                <span className="badge badge-green font-mono">ONLINE</span>
-              </td>
-            </tr>
-            <tr>
-              <td style={{ fontWeight: '600', color: 'var(--text-primary)' }}>experiment_runs</td>
-              <td>
-                <span className="badge badge-amber font-mono">RELATIONAL</span>
-              </td>
-              <td>
-                <span className="font-mono" style={{ fontSize: '12px' }}>
-                  run_id (UUIDv4)
-                </span>
-              </td>
-              <td className="font-mono" style={{ fontWeight: '600' }}>
-                {status?.counts.experiment_runs ?? '—'}
-              </td>
-              <td>
-                <span className="badge badge-green font-mono">ONLINE</span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <div className="overflow-x-auto">
+          <table className="terminal-table">
+            <thead>
+              <tr>
+                <th>Table Name</th>
+                <th>Storage Type</th>
+                <th>Partitioning Key</th>
+                <th className="text-right">Total Records</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="font-mono font-bold text-[#e6edf3] text-xs">signal_results</td>
+                <td className="text-xs font-mono text-[#58a6ff]">Hypertable</td>
+                <td className="font-mono text-xs text-[#8b949e]">timestamp (UTC)</td>
+                <td className="font-mono font-bold text-[#3fb950] text-right text-xs tabular-nums">
+                  {status?.counts.signal_results?.toLocaleString() ?? '—'}
+                </td>
+                <td>
+                  <span className="flex items-center gap-1.5 text-xs font-mono text-[#3fb950]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#3fb950]" />
+                    Online
+                  </span>
+                </td>
+              </tr>
+              <tr>
+                <td className="font-mono font-bold text-[#e6edf3] text-xs">event_log</td>
+                <td className="text-xs font-mono text-[#58a6ff]">Hypertable</td>
+                <td className="font-mono text-xs text-[#8b949e]">timestamp (UTC)</td>
+                <td className="font-mono font-bold text-[#3fb950] text-right text-xs tabular-nums">
+                  {status?.counts.events_logged?.toLocaleString() ?? '—'}
+                </td>
+                <td>
+                  <span className="flex items-center gap-1.5 text-xs font-mono text-[#3fb950]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#3fb950]" />
+                    Online
+                  </span>
+                </td>
+              </tr>
+              <tr>
+                <td className="font-mono font-bold text-[#e6edf3] text-xs">signal_definitions</td>
+                <td className="text-xs font-mono text-[#e3b341]">Relational</td>
+                <td className="font-mono text-xs text-[#8b949e]">id (UUIDv4)</td>
+                <td className="font-mono font-semibold text-[#e6edf3] text-right text-xs tabular-nums">
+                  {status?.counts.signal_definitions?.toLocaleString() ?? '—'}
+                </td>
+                <td>
+                  <span className="flex items-center gap-1.5 text-xs font-mono text-[#3fb950]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#3fb950]" />
+                    Online
+                  </span>
+                </td>
+              </tr>
+              <tr>
+                <td className="font-mono font-bold text-[#e6edf3] text-xs">experiment_definitions</td>
+                <td className="text-xs font-mono text-[#e3b341]">Relational</td>
+                <td className="font-mono text-xs text-[#8b949e]">experiment_id (UUIDv4)</td>
+                <td className="font-mono font-semibold text-[#e6edf3] text-right text-xs tabular-nums">
+                  {status?.counts.experiments?.toLocaleString() ?? '—'}
+                </td>
+                <td>
+                  <span className="flex items-center gap-1.5 text-xs font-mono text-[#3fb950]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#3fb950]" />
+                    Online
+                  </span>
+                </td>
+              </tr>
+              <tr>
+                <td className="font-mono font-bold text-[#e6edf3] text-xs">experiment_runs</td>
+                <td className="text-xs font-mono text-[#e3b341]">Relational</td>
+                <td className="font-mono text-xs text-[#8b949e]">run_id (UUIDv4)</td>
+                <td className="font-mono font-semibold text-[#e6edf3] text-right text-xs tabular-nums">
+                  {status?.counts.experiment_runs?.toLocaleString() ?? '—'}
+                </td>
+                <td>
+                  <span className="flex items-center gap-1.5 text-xs font-mono text-[#3fb950]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#3fb950]" />
+                    Online
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

@@ -111,8 +111,22 @@ export default function AegisChart({
   // Convert raw API data into clean Candles
   const candles = React.useMemo<Candle[]>(() => {
     const deduped = new Map<number, Candle>();
-    data.forEach((p) => {
-      const time = p.time ?? Math.floor(Date.parse(p.timestamp) / 1000);
+    const totalCount = data.length;
+    data.forEach((p, idx) => {
+      let time = p.time;
+      if (!time || isNaN(time)) {
+        const parsed = Date.parse(p.timestamp);
+        if (!isNaN(parsed)) {
+          time = Math.floor(parsed / 1000);
+        } else if (typeof p.timestamp === 'string' && p.timestamp.includes(':')) {
+          const now = new Date();
+          const parts = p.timestamp.split(':').map(Number);
+          now.setUTCHours(parts[0] || 0, parts[1] || 0, 0, 0);
+          time = Math.floor(now.getTime() / 1000) - (totalCount - idx) * 300;
+        } else {
+          time = Math.floor(Date.now() / 1000) - (totalCount - idx) * 300;
+        }
+      }
       const open = p.open ?? p.price;
       const high = p.high ?? p.price;
       const low = p.low ?? p.price;
@@ -173,19 +187,24 @@ export default function AegisChart({
   React.useEffect(() => {
     if (!containerRef.current) return;
 
+    const initialWidth =
+      containerRef.current.clientWidth ||
+      containerRef.current.parentElement?.clientWidth ||
+      (typeof window !== 'undefined' ? window.innerWidth - 320 : 800);
+
     const chart = createChart(containerRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: '#080a0f' },
-        textColor: '#94a3b8',
+        textColor: '#8b949e',
       },
       grid: {
-        vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
-        horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
+        vertLines: { color: 'rgba(255, 255, 255, 0.04)' },
+        horzLines: { color: 'rgba(255, 255, 255, 0.04)' },
       },
       crosshair: { mode: CrosshairMode.Normal },
       rightPriceScale: { borderColor: 'rgba(255, 255, 255, 0.08)' },
       timeScale: { borderColor: 'rgba(255, 255, 255, 0.08)', timeVisible: true, secondsVisible: false },
-      width: containerRef.current.clientWidth,
+      width: Math.max(300, initialWidth),
       height: 480,
     });
     chartRef.current = chart;
@@ -211,15 +230,23 @@ export default function AegisChart({
     // Resize observer
     const handleResize = () => {
       if (containerRef.current && chartRef.current) {
-        const w = containerRef.current.clientWidth;
+        const w =
+          containerRef.current.clientWidth ||
+          containerRef.current.parentElement?.clientWidth ||
+          800;
         const h = 480;
-        setDimensions({ width: w, height: h });
-        chartRef.current.applyOptions({ width: w, height: h });
+        if (w > 0) {
+          setDimensions({ width: w, height: h });
+          chartRef.current.applyOptions({ width: w, height: h });
+        }
       }
     };
     handleResize();
 
     const observer = new ResizeObserver(handleResize);
+    if (containerRef.current.parentElement) {
+      observer.observe(containerRef.current.parentElement);
+    }
     observer.observe(containerRef.current);
 
     return () => {
@@ -389,13 +416,15 @@ export default function AegisChart({
     indicatorSeriesMapRef.current = newIndicatorSeries;
 
     // Restore visible range if user already had an active zoom/pan; otherwise fit initial
-    if (isInitialMountRef.current) {
+    if (isInitialMountRef.current || !prevLogicalRange) {
       timeScale.fitContent();
       isInitialMountRef.current = false;
-    } else if (prevLogicalRange) {
+    } else {
       try {
         timeScale.setVisibleLogicalRange(prevLogicalRange);
-      } catch {}
+      } catch {
+        timeScale.fitContent();
+      }
     }
   }, [candles, chartState.chartType, chartState.showVolume, chartState.indicators]);
 
@@ -603,7 +632,38 @@ export default function AegisChart({
 
       {/* 3. Main Chart & Overlay Container */}
       <div style={{ position: 'relative', width: '100%', height: 480, overflow: 'hidden' }}>
-        <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0, zIndex: 1 }} />
+        <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+
+        {candles.length === 0 && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: '#080a0f',
+              zIndex: 10,
+              color: '#8b949e',
+              fontFamily: 'monospace',
+              fontSize: 12,
+              gap: 12,
+            }}
+          >
+            <div
+              style={{
+                width: 20,
+                height: 20,
+                borderRadius: '50%',
+                border: '2px solid #30363d',
+                borderTopColor: '#d29922',
+                animation: 'spin 1s linear infinite',
+              }}
+            />
+            <span style={{ letterSpacing: '0.05em' }}>CONNECTING TO COINBASE MARKET FEED...</span>
+          </div>
+        )}
 
         {/* Floating Action Bar for Selected Drawing */}
         {chartState.selectedDrawingId && (

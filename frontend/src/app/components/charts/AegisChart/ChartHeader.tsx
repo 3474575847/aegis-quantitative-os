@@ -20,112 +20,71 @@ export default function ChartHeader({ symbol, candles, hoverCandle, providerStat
   const pctChange = previous && previous.close > 0 ? change / previous.close : 0;
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '10px 16px',
-        background: '#080a0f',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-        flexWrap: 'wrap',
-        gap: 12,
-      }}
-    >
+    <div className="flex items-center justify-between px-3.5 py-2 bg-[#0c0f15] border-b border-[#1b2230] flex-wrap gap-2 text-xs font-mono">
       {/* Symbol & Primary Price */}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-        <span
-          style={{
-            fontSize: 18,
-            fontWeight: 700,
-            color: '#f8fafc',
-            fontFamily: 'var(--font-mono, monospace)',
-            letterSpacing: '0.5px',
-          }}
-        >
+      <div className="flex items-baseline gap-3">
+        <span className="font-bold text-[#e6edf3] tracking-wide text-sm">
           {symbol}
         </span>
         {current ? (
           <>
-            <span
-              style={{
-                fontSize: 22,
-                fontWeight: 700,
-                color: '#f8fafc',
-                fontFamily: 'var(--font-mono, monospace)',
-              }}
-            >
+            <span className="text-base font-bold text-[#e6edf3] tabular-nums">
               ${formatFigure(price)}
             </span>
             <span
-              style={{
-                fontSize: 13,
-                fontWeight: 600,
-                fontFamily: 'var(--font-mono, monospace)',
-                color: change >= 0 ? '#10b981' : '#f43f5e',
-              }}
+              className={`text-xs font-semibold tabular-nums ${
+                change >= 0 ? 'text-[#3fb950]' : 'text-[#f85149]'
+              }`}
             >
               {formatSignedFigure(change)} ({formatPercent(pctChange)})
             </span>
           </>
         ) : (
-          <span style={{ fontSize: 14, color: '#64748b' }}>No market data available</span>
+          <span className="text-xs text-[#586069]">No market data available</span>
         )}
       </div>
 
-      {/* OHLCV Readout */}
+      {/* OHLCV Tabular Readout */}
       {current && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 16,
-            fontSize: 12,
-            fontFamily: 'var(--font-mono, monospace)',
-            color: '#94a3b8',
-          }}
-        >
+        <div className="flex items-center gap-3.5 text-[11px] text-[#8b949e]">
           <div>
-            <span style={{ color: '#64748b' }}>O </span>
-            <span style={{ color: '#f8fafc' }}>{formatFigure(current.open)}</span>
+            <span className="text-[#586069]">O </span>
+            <span className="text-[#e6edf3] tabular-nums">{formatFigure(current.open)}</span>
           </div>
           <div>
-            <span style={{ color: '#64748b' }}>H </span>
-            <span style={{ color: '#f8fafc' }}>{formatFigure(current.high)}</span>
+            <span className="text-[#586069]">H </span>
+            <span className="text-[#e6edf3] tabular-nums">{formatFigure(current.high)}</span>
           </div>
           <div>
-            <span style={{ color: '#64748b' }}>L </span>
-            <span style={{ color: '#f8fafc' }}>{formatFigure(current.low)}</span>
+            <span className="text-[#586069]">L </span>
+            <span className="text-[#e6edf3] tabular-nums">{formatFigure(current.low)}</span>
           </div>
           <div>
-            <span style={{ color: '#64748b' }}>C </span>
-            <span style={{ color: '#f8fafc' }}>{formatFigure(current.close)}</span>
+            <span className="text-[#586069]">C </span>
+            <span className="text-[#e6edf3] tabular-nums">{formatFigure(current.close)}</span>
           </div>
           <div>
-            <span style={{ color: '#64748b' }}>Vol </span>
-            <span style={{ color: '#f8fafc' }}>
-              {current.volume != null ? formatFigure(current.volume) : 'Unavailable'}
+            <span className="text-[#586069]">Vol </span>
+            <span className="text-[#e6edf3] tabular-nums">
+              {current.volume != null ? formatFigure(current.volume) : '—'}
             </span>
           </div>
         </div>
       )}
 
-      {/* Provider Provenance Badge */}
+      {/* Provider Provenance (Unboxed or Micro-tag) */}
       {providerStatus && (
-        <div
-          style={{
-            fontSize: 10,
-            fontFamily: 'var(--font-mono, monospace)',
-            padding: '2px 8px',
-            borderRadius: 4,
-            background: providerStatus.isFallback ? 'rgba(245, 158, 11, 0.12)' : 'rgba(16, 185, 129, 0.12)',
-            color: providerStatus.isFallback ? '#f59e0b' : '#10b981',
-            border: `1px solid ${providerStatus.isFallback ? 'rgba(245, 158, 11, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
-          }}
-        >
-          {providerStatus.isFallback
-            ? `FALLBACK: ${providerStatus.source ?? 'Alternative'}`
-            : `LIVE: ${providerStatus.source ?? 'Verified'}`}
+        <div className="flex items-center gap-1.5 text-[10px] text-[#7d8590]">
+          <span
+            className={`w-1.5 h-1.5 rounded-[1px] inline-block ${
+              providerStatus.isFallback ? 'bg-[#d29922]' : 'bg-[#3fb950]'
+            }`}
+          />
+          <span className="text-[#c9d1d9] font-semibold">
+            {providerStatus.isFallback ? 'FALLBACK' : 'LIVE'}
+          </span>
+          <span>·</span>
+          <span>{providerStatus.source ?? 'Verified'}</span>
         </div>
       )}
     </div>

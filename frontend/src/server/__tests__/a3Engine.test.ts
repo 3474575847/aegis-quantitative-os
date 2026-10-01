@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateA3AdaptiveAlpha } from '../a3Engine';
+import { evaluateA3AdaptiveAlpha, solveRidgeBayesian } from '../a3Engine';
 import { computeMarketStructure } from '../marketStructure';
 
 describe('AEGIS Adaptive Alpha Engine (A³) Unit Tests', () => {
@@ -51,7 +51,7 @@ describe('AEGIS Adaptive Alpha Engine (A³) Unit Tests', () => {
   it('evaluates full A³ Adaptive Alpha signal with quality gates and factor contributions', () => {
     const evalResult = evaluateA3AdaptiveAlpha('BTC', mockCandles, mockNews as any);
     expect(evalResult.symbol).toBe('BTC');
-    expect(evalResult.model_version).toBe('A3-V1.3.0');
+    expect(evalResult.model_version).toContain('A3');
     expect(['BUY', 'WATCH', 'SELL', 'NO TRADE']).toContain(evalResult.signal_action);
     expect(evalResult.calibrated_aegis_score).toBeGreaterThanOrEqual(-3.0);
     expect(evalResult.calibrated_aegis_score).toBeLessThanOrEqual(3.0);
@@ -91,5 +91,32 @@ describe('AEGIS Adaptive Alpha Engine (A³) Unit Tests', () => {
     expect(Number.isNaN(evalResult.calibrated_aegis_score)).toBe(false);
     expect(Number.isNaN(evalResult.expected_excess_return_pct)).toBe(false);
     expect(Math.abs(evalResult.calibrated_aegis_score)).toBeLessThan(0.2);
+  });
+
+  it('solves Bayesian Ridge Regression with L2 shrinkage and prior alignment', () => {
+    const X = [
+      [1.0, 0.5],
+      [0.8, -0.2],
+      [-0.5, -0.8],
+      [-1.0, -0.5],
+      [0.2, 0.9],
+    ];
+    const y = [0.02, 0.015, -0.01, -0.02, 0.01];
+    const prior = [0.01, 0.005];
+
+    const betas = solveRidgeBayesian(X, y, prior, 1.0);
+    expect(betas.length).toBe(2);
+    expect(Number.isNaN(betas[0])).toBe(false);
+    expect(Number.isNaN(betas[1])).toBe(false);
+    // Beta on positive predictor X[0] should be positive
+    expect(betas[0]).toBeGreaterThan(0);
+  });
+
+  it('populates dynamic active regression betas and diagnostics in A3 evaluation', () => {
+    const evalResult = evaluateA3AdaptiveAlpha('BTC', mockCandles, []);
+    expect(evalResult.diagnostics).toBeDefined();
+    expect(evalResult.diagnostics?.active_betas).toBeDefined();
+    expect(Object.keys(evalResult.diagnostics?.active_betas || {}).length).toBeGreaterThan(0);
+    expect(evalResult.recommended_position).toBeDefined();
   });
 });

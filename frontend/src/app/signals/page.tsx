@@ -1,8 +1,12 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import SentimentPriceChart, { ChartDatapoint } from "../components/SentimentPriceChart";
+import SentimentPriceChart, { ChartDatapoint, AegisSignalOverlay } from "../components/SentimentPriceChart";
 import { apiUrl, formatFigure, formatSignedFigure } from '@/lib/api';
+import { SearchIcon, RefreshIcon, LayersIcon } from '../components/icons';
+import AlphaGauge from '../components/visuals/AlphaGauge';
+import FactorAttributionChart from '../components/visuals/FactorAttributionChart';
+import FactorCorrelationMatrix from '../components/visuals/FactorCorrelationMatrix';
 
 interface SignalItem {
   id: string;
@@ -42,6 +46,7 @@ export default function SignalsPage() {
   const symbolRef = useRef("BTC");
   const [activeQuote, setActiveQuote] = useState<TickerQuote | null>(null);
   const [tickerHistory, setTickerHistory] = useState<ChartDatapoint[]>([]);
+  const [chartSignals, setChartSignals] = useState<AegisSignalOverlay[]>([]);
   const [a3Evaluation, setA3Evaluation] = useState<any | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -109,550 +114,493 @@ export default function SignalsPage() {
     setSymbolInput(cleanSym);
     setQuoteLoading(true);
     try {
-      // 1. Fetch live quote metadata
       const resQuote = await fetchWithRetry(apiUrl(`/api/market/ticker/${cleanSym}`));
       if (resQuote.ok) {
         const q = await resQuote.json();
         setActiveQuote(q);
       }
 
-      // 2. Fetch per-ticker history — chart re-renders with unique shape for each symbol
       const resHist = await fetchWithRetry(apiUrl(`/api/market/ticker/${cleanSym}/history`));
       if (resHist.ok) {
-        const hData = await resHist.json();
-        let datapoints = hData.datapoints || [];
-        const isEquity = !['BTC', 'ETH', 'SOL', 'DOGE'].includes(cleanSym.replace('-USD', ''));
-        if (datapoints.length === 0 && isEquity) {
-          const fallback = await fetch(`/api/market-history/${encodeURIComponent(cleanSym)}`);
-          if (fallback.ok) {
-            datapoints = (await fallback.json()).datapoints || [];
-          }
+        const hist = await resHist.json();
+        const rawPoints = Array.isArray(hist) ? hist : (hist?.datapoints || []);
+        if (Array.isArray(rawPoints) && rawPoints.length > 0) {
+          const mapped: ChartDatapoint[] = rawPoints.map((item: any) => ({
+            timestamp: item.timestamp,
+            time: item.time,
+            open: Number(item.open ?? item.price),
+            high: Number(item.high ?? item.price),
+            low: Number(item.low ?? item.price),
+            close: Number(item.close ?? item.price),
+            price: Number(item.price ?? item.close),
+            volume: Number(item.volume ?? 0),
+            sentimentZ: Number(item.sentimentZ ?? 0),
+            sentiment_score: Number(item.sentiment_score ?? item.sentimentZ ?? 0),
+          }));
+          setTickerHistory(mapped);
         }
-        setTickerHistory(datapoints);
       }
 
-      // 3. Fetch A3 Adaptive Alpha evaluation
-      const resA3 = await fetchWithRetry(apiUrl(`/api/signals/a3/${cleanSym}`));
-      if (resA3.ok) {
-        const evalData = await resA3.json();
+      const resSig = await fetchWithRetry(apiUrl(`/api/signals/a3/${cleanSym}`));
+      if (resSig.ok) {
+        const evalData = await resSig.json();
         setA3Evaluation(evalData);
+        const overlays = evalData.signal_overlays || evalData.historical_signal_overlays || [];
+        if (Array.isArray(overlays)) {
+          setChartSignals(overlays);
+        } else {
+          setChartSignals([]);
+        }
       }
-    } catch (e) {
-      setApiError("Market quote fetch failed — API may be temporarily unavailable.");
-      console.error("Error fetching asset quote or history", e);
-      // Keep stale data visible rather than clearing it
+    } catch (err) {
+      console.error(`Failed to refresh market data for ${cleanSym}`, err);
     } finally {
       setQuoteLoading(false);
     }
   };
 
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    selectTicker(symbolInput);
+  };
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-      {/* Page Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <div className="flex flex-col gap-3.5 pb-10">
+      {/* Header Telemetry Toolbar */}
+      <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-[#1b2230]">
         <div>
-          <h1 style={{ fontSize: "22px", fontWeight: "800", letterSpacing: "-0.5px", color: "var(--text-primary)" }}>
-            QUANTITATIVE SIGNAL ENGINE & ASSET INSPECTOR
-          </h1>
-          <p style={{ fontSize: "13px", color: "var(--text-muted)", marginTop: "4px" }}>
-            Real-time factor calculation pipeline operating on live exchange spot feeds & social sentiment.
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-[1px] bg-[#d29922]" />
+            <h1 className="text-base font-bold tracking-tight text-[#e6edf3] font-mono">
+              Signal Engine
+            </h1>
+          </div>
+          <p className="text-xs text-[#8b949e] mt-1">
+            Point-in-time factor attribution, calibrated weights, and asset-class applicability
           </p>
         </div>
-        <button className="btn btn-secondary" onClick={fetchSignals}>
-          Refresh Factors
-        </button>
-      </div>
 
-      {/* API error banner — shown when the backend is unreachable */}
-      {apiError && (
-        <div
-          style={{
-            padding: "10px 16px",
-            backgroundColor: "rgba(239, 68, 68, 0.1)",
-            border: "1px solid var(--accent-red)",
-            borderRadius: "6px",
-            fontSize: "13px",
-            color: "var(--accent-amber)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <span>⚠ {apiError}</span>
-          <button
-            className="btn btn-secondary"
-            onClick={() => { setApiError(null); fetchSignals(); }}
-            style={{ fontSize: "11px", padding: "3px 8px" }}
-          >
-            Retry
-          </button>
-        </div>
-      )}
-
-      {/* UI/UX Pro Max Asset Inspector & Ticker Bar */}
-      <div
-        className="card"
-        style={{
-          border: "1px solid rgba(0, 210, 255, 0.25)",
-          backgroundColor: "rgba(18, 23, 34, 0.8)",
-          backdropFilter: "blur(12px)",
-          borderRadius: "10px",
-          padding: "20px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "16px",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <span style={{ fontSize: "14px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--accent-cyan)" }}>
-              🌐 LIVE MARKET TICKER INSPECTOR
-            </span>
-            <p style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>
-              Select any asset to dynamically stream price quotes and update the dual-axis sentiment overlay chart.
-            </p>
-          </div>
-
-          {/* Quick Selector Pills */}
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            {["BTC", "ETH", "AAPL", "TSLA", "NVDA"].map((sym) => (
+        {/* Quick Symbol Switcher & Input */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center bg-[#090c10] border border-[#1b2230] rounded-[2px] p-0.5">
+            {["BTC", "ETH", "NVDA", "AAPL"].map((sym) => (
               <button
                 key={sym}
-                className={`btn ${symbolInput === sym ? "btn-primary" : "btn-secondary"}`}
                 onClick={() => selectTicker(sym)}
-                style={{
-                  padding: "6px 14px",
-                  fontSize: "12px",
-                  fontWeight: "700",
-                  fontFamily: "var(--font-mono)",
-                  borderRadius: "6px",
-                  border: symbolInput === sym ? "1px solid var(--accent-cyan)" : "1px solid var(--border-color)",
-                }}
+                className={`px-2 py-0.5 text-xs font-mono rounded-[1px] transition-colors ${
+                  activeQuote?.symbol === sym
+                    ? "bg-[#1b2230] text-[#e6edf3] font-bold border border-[#2f3b52]"
+                    : "text-[#7d8590] hover:text-[#e6edf3] border border-transparent"
+                }`}
               >
                 {sym}
               </button>
             ))}
           </div>
+
+          <form onSubmit={handleSearchSubmit} className="flex items-center">
+            <div className="relative flex items-center">
+              <input
+                type="text"
+                value={symbolInput}
+                onChange={(e) => setSymbolInput(e.target.value.toUpperCase())}
+                placeholder="SYMBOL"
+                className="w-24 px-2 py-1 bg-[#10141d] border border-[#1b2230] focus:border-[#d29922] text-xs font-mono text-[#e6edf3] outline-none rounded-[2px]"
+              />
+              <button
+                type="submit"
+                disabled={quoteLoading}
+                className="px-2 py-1 bg-[#161c28] hover:bg-[#1f283b] text-[#8b949e] hover:text-[#e6edf3] border border-l-0 border-[#1b2230] rounded-r-[2px] text-xs"
+              >
+                <SearchIcon size={12} />
+              </button>
+            </div>
+          </form>
         </div>
+      </div>
 
-        {/* Ticker Search Bar */}
-        <div style={{ display: "flex", gap: "10px" }}>
-          <input
-            type="text"
-            className="font-mono"
-            placeholder="Type any ticker symbol (e.g. BTC, ETH, AAPL, TSLA, NVDA)..."
-            value={symbolInput}
-            onChange={(e) => setSymbolInput(e.target.value.toUpperCase())}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") selectTicker(symbolInput);
-            }}
-            style={{
-              flex: 1,
-              padding: "10px 14px",
-              backgroundColor: "var(--bg-secondary)",
-              border: "1px solid var(--border-color)",
-              borderRadius: "6px",
-              color: "var(--text-primary)",
-              fontSize: "13px",
-              fontWeight: "600",
-            }}
-          />
-          <button className="btn btn-primary" onClick={() => selectTicker(symbolInput)}>
-            Inspect Symbol
-          </button>
+      {apiError && (
+        <div className="px-3 py-2 bg-[#28161a] border border-[#482025] text-[#f85149] text-xs font-mono rounded-[2px]">
+          Warning: {apiError}
         </div>
+      )}
 
-        {/* Live Asset Telemetry Box */}
-        {quoteLoading ? (
-          <div style={{ padding: "20px", textAlign: "center", color: "var(--text-muted)", fontSize: "13px" }}>
-            Fetching live exchange quotes for {symbolInput}...
+      {/* Primary Telemetry: Asset Snapshot */}
+      {activeQuote && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px]">
+          <div className="flex flex-col justify-between">
+            <span className="metric-label">Asset / Class</span>
+            <span className="text-base font-bold font-mono text-[#e6edf3] mt-1">
+              {activeQuote.symbol} · <span className="text-xs text-[#8b949e]">{activeQuote.asset_class}</span>
+            </span>
+            <span className="text-[11px] text-[#586069] font-mono mt-1">Feed: {activeQuote.exchange}</span>
           </div>
-        ) : activeQuote ? (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(4, 1fr)",
-              gap: "20px",
-              backgroundColor: "var(--bg-card)",
-              padding: "18px",
-              borderRadius: "8px",
-              border: "1px solid var(--border-color)",
-            }}
-          >
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <span className="card-title">Ticker / Symbol</span>
-              <span className="card-value font-mono" style={{ fontSize: "22px", color: "var(--text-primary)", fontWeight: "800" }}>
-                {activeQuote.symbol}
-              </span>
-              <span className="card-subtitle" style={{ fontSize: "11px" }}>Asset Class: {activeQuote.asset_class}</span>
-            </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <span className="card-title">Live Spot Price</span>
-              <span className="card-value font-mono" style={{ fontSize: "24px", color: "var(--accent-green)", fontWeight: "800" }}>
-                ${formatFigure(activeQuote.price)}
-              </span>
-              <span className="card-subtitle" style={{ color: "var(--accent-green)", fontSize: "11px", fontWeight: "600" }}>
-                ● {activeQuote.exchange}
-              </span>
-            </div>
+          <div className="flex flex-col justify-between">
+            <span className="metric-label">Live Spot Price</span>
+            <span className="text-base font-bold font-mono text-[#e6edf3] tabular-nums mt-1">
+              ${formatFigure(activeQuote.price)}
+            </span>
+            <span className="text-[11px] text-[#3fb950] font-mono mt-1">Stream active</span>
+          </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <span className="card-title">Quant Signal Rating</span>
-              <span className="card-value font-mono" style={{ fontSize: "22px", color: "var(--accent-cyan)", fontWeight: "800" }}>
-                {formatSignedFigure(activeQuote.z_score_signal)} Z
-              </span>
-              <span className="card-subtitle" style={{ fontSize: "11px", fontWeight: "600" }}>
-                {activeQuote.z_score_signal > 0.3 ? "BULLISH MOMENTUM" : "NEUTRAL"}
+          <div className="flex flex-col justify-between">
+            <span className="metric-label">Quant Momentum Score</span>
+            <span className={`text-base font-bold font-mono tabular-nums mt-1 ${
+              activeQuote.z_score_signal >= 0 ? "text-[#3fb950]" : "text-[#f85149]"
+            }`}>
+              {formatSignedFigure(activeQuote.z_score_signal)} σ
+            </span>
+            <span className="text-[11px] text-[#8b949e] font-mono mt-1">
+              {activeQuote.z_score_signal > 0.3 ? "Bullish momentum" : activeQuote.z_score_signal < -0.3 ? "Bearish momentum" : "Neutral bias"}
+            </span>
+          </div>
+
+          <div className="flex flex-col justify-between">
+            <span className="metric-label">Provenance Status</span>
+            <div className="flex items-center gap-2 mt-1">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  activeQuote.is_fallback ? "bg-[#d29922]" : "bg-[#3fb950]"
+                }`}
+              />
+              <span className="text-xs font-mono font-semibold text-[#c9d1d9]">
+                {activeQuote.is_fallback ? "Fallback Cache" : "Live Feed"}
               </span>
             </div>
+            <span className="text-[11px] text-[#586069] font-mono mt-1">
+              Verified {new Date(activeQuote.timestamp).toLocaleTimeString()}
+            </span>
+          </div>
+        </div>
+      )}
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px", alignItems: "flex-start" }}>
-              <span className="card-title">Exchange Feed Status</span>
-              {activeQuote.is_fallback ? (
-                <span className="badge badge-amber font-mono" style={{ marginTop: "2px", padding: "4px 8px" }}>
-                  FALLBACK CACHE
-                </span>
-              ) : (
-                <span className="badge badge-green font-mono" style={{ marginTop: "2px", padding: "4px 8px" }}>
-                  LIVE REAL-WORLD
-                </span>
-              )}
-              <span className="card-subtitle font-mono" style={{ marginTop: "4px", fontSize: "10px" }}>
-                Updated: {new Date(activeQuote.timestamp).toLocaleTimeString()}
+      {/* A³ Live Quantitative Intelligence Panel */}
+      {a3Evaluation && (
+        <div className="panel overflow-hidden">
+          {/* Signal Telemetry Header Bar */}
+          <div className="panel-header">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="panel-title flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#d29922]" />
+                A³ Systematic Alpha Engine
               </span>
-              {activeQuote.fallback_reason && (
-                <span className="card-subtitle" style={{ fontSize: "10px", color: "var(--accent-amber)" }}>
-                  {activeQuote.fallback_reason}
-                </span>
-              )}
+              <div className="flex items-center gap-2 text-xs font-mono text-[#8b949e]">
+                <span>Model: {a3Evaluation.model_version}</span>
+                <span>·</span>
+                <span>Horizon: {a3Evaluation.signal_horizon}</span>
+              </div>
+            </div>
+
+            {/* Signal Action Telemetry Indicator */}
+            <div className="flex items-center gap-2 font-mono text-xs">
+              <span className="text-[#8b949e]">Signal:</span>
+              <span
+                className={`px-2 py-0.5 rounded-[2px] font-bold text-xs border ${
+                  a3Evaluation.signal_action === "BUY"
+                    ? "bg-[#132d20] text-[#3fb950] border-[#235338]"
+                    : a3Evaluation.signal_action === "SELL"
+                    ? "bg-[#33181c] text-[#f85149] border-[#552329]"
+                    : "bg-[#252015] text-[#d29922] border-[#44381e]"
+                }`}
+              >
+                {a3Evaluation.signal_action === "BUY" ? "LONG" : a3Evaluation.signal_action === "SELL" ? "SHORT" : "HOLD"}
+              </span>
+              <span className="text-[#586069]">·</span>
+              <span className="text-[#8b949e]">Next-bar execution</span>
             </div>
           </div>
-        ) : null}
 
-        {/* AEGIS ADAPTIVE ALPHA ENGINE (A³) LIVE INTELLIGENCE BANNER */}
-        {a3Evaluation && (
-          <div
-            style={{
-              marginTop: "16px",
-              padding: "18px",
-              backgroundColor: "rgba(10, 16, 26, 0.9)",
-              border: "1px solid var(--accent-cyan)",
-              borderRadius: "8px",
-              display: "flex",
-              flexDirection: "column",
-              gap: "14px",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <span className="badge badge-cyan font-mono" style={{ fontSize: "12px", padding: "4px 10px" }}>
-                  A³ ADAPTIVE ALPHA ENGINE
-                </span>
-                <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Model: {a3Evaluation.model_version}</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Signal Horizon: {a3Evaluation.signal_horizon}</span>
-                <span
-                  className="font-mono"
-                  style={{
-                    padding: "6px 14px",
-                    borderRadius: "6px",
-                    fontWeight: "800",
-                    fontSize: "14px",
-                    backgroundColor:
-                      a3Evaluation.signal_action === "BUY"
-                        ? "rgba(16, 185, 129, 0.2)"
-                        : a3Evaluation.signal_action === "SELL"
-                        ? "rgba(239, 68, 68, 0.2)"
-                        : "rgba(245, 158, 11, 0.2)",
-                    color:
-                      a3Evaluation.signal_action === "BUY"
-                        ? "var(--accent-green)"
-                        : a3Evaluation.signal_action === "SELL"
-                        ? "var(--accent-red)"
-                        : "var(--accent-amber)",
-                    border: `1px solid ${
-                      a3Evaluation.signal_action === "BUY"
-                        ? "var(--accent-green)"
-                        : a3Evaluation.signal_action === "SELL"
-                        ? "var(--accent-red)"
-                        : "var(--accent-amber)"
-                    }`,
-                  }}
-                >
-                  STATE: {a3Evaluation.signal_action}
-                </span>
-              </div>
-            </div>
+          {/* Quantitative Metrics & Alpha Gauge */}
+          <div className="p-4 flex flex-col gap-4">
+            <AlphaGauge
+              score={a3Evaluation.calibrated_aegis_score}
+              conviction={
+                a3Evaluation.uncertainty_pct
+                  ? Math.max(0.25, Math.min(0.95, 1 - a3Evaluation.uncertainty_pct / 8))
+                  : 0.76
+              }
+              action={a3Evaluation.signal_action}
+              hurdleRate={0.15}
+              expectedReturn={a3Evaluation.expected_excess_return_pct / 100}
+            />
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", backgroundColor: "var(--bg-secondary)", padding: "12px", borderRadius: "6px" }}>
-              <div>
-                <span style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Calibrated Score</span>
-                <div style={{ fontSize: "20px", fontWeight: "800", color: a3Evaluation.calibrated_aegis_score >= 0 ? "var(--accent-green)" : "var(--accent-red)" }}>
-                  {formatSignedFigure(a3Evaluation.calibrated_aegis_score)} σ
+            {/* Quantitative Evidence & Drivers */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <div className="bg-[#10141d] border border-[#1b2230] p-3 rounded-[2px]">
+                <div className="text-xs font-semibold text-[#8b949e] uppercase tracking-wider mb-2 flex items-center justify-between">
+                  <span>Primary Alpha Driver</span>
+                  <span className="text-[#e6edf3] font-mono font-bold">{a3Evaluation.primary_driver}</span>
                 </div>
-              </div>
-              <div>
-                <span style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Expected Excess Return</span>
-                <div style={{ fontSize: "20px", fontWeight: "800", color: a3Evaluation.expected_excess_return_pct >= 0 ? "var(--accent-green)" : "var(--accent-red)" }}>
-                  {formatSignedFigure(a3Evaluation.expected_excess_return_pct)}%
-                </div>
-              </div>
-              <div>
-                <span style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>Uncertainty (±σ)</span>
-                <div style={{ fontSize: "20px", fontWeight: "800", color: "var(--accent-amber)" }}>
-                  ±{a3Evaluation.uncertainty_pct}%
-                </div>
-              </div>
-              <div>
-                <span style={{ fontSize: "11px", color: "var(--text-muted)", textTransform: "uppercase" }}>95% Confidence Interval</span>
-                <div style={{ fontSize: "14px", fontWeight: "700", color: "var(--text-primary)", marginTop: "4px" }}>
-                  [{a3Evaluation.confidence_interval[0]}%, {a3Evaluation.confidence_interval[1]}%]
-                </div>
-              </div>
-            </div>
-
-            {/* WHY THIS SIGNAL PANEL & HOW AEGIS LEARNED */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginTop: "8px" }}>
-              {/* Why This Signal */}
-              <div style={{ padding: "14px", backgroundColor: "var(--bg-card)", borderRadius: "6px", border: "1px solid var(--border-color)" }}>
-                <span style={{ fontSize: "12px", fontWeight: "800", color: "var(--accent-cyan)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                  🔍 WHY THIS SIGNAL?
-                </span>
-                <div style={{ marginTop: "8px", fontSize: "12px" }}>
-                  <span style={{ color: "var(--text-muted)" }}>Primary Driver: </span>
-                  <strong style={{ color: "var(--text-primary)" }}>{a3Evaluation.primary_driver}</strong>
-                </div>
-
-                <div style={{ marginTop: "8px" }}>
-                  <span style={{ fontSize: "11px", color: "var(--accent-green)", fontWeight: "700" }}>SUPPORTING EVIDENCE</span>
-                  <ul style={{ margin: "4px 0 0 16px", padding: 0, fontSize: "11px", color: "var(--text-primary)" }}>
-                    {a3Evaluation.supporting_evidence.map((ev: string, idx: number) => (
-                      <li key={idx}>{ev}</li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div style={{ marginTop: "8px" }}>
-                  <span style={{ fontSize: "11px", color: "var(--accent-red)", fontWeight: "700" }}>CONTRADICTING EVIDENCE</span>
-                  <ul style={{ margin: "4px 0 0 16px", padding: 0, fontSize: "11px", color: "var(--text-muted)" }}>
-                    {a3Evaluation.contradicting_evidence.map((ev: string, idx: number) => (
-                      <li key={idx}>{ev}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-
-              {/* How Aegis Learned */}
-              <div style={{ padding: "14px", backgroundColor: "var(--bg-card)", borderRadius: "6px", border: "1px solid var(--border-color)" }}>
-                <span style={{ fontSize: "12px", fontWeight: "800", color: "var(--accent-purple)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                  🧠 HOW AEGIS LEARNED (CALIBRATION)
-                </span>
-                <p style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>
-                  Ridge-GAM empirical weights calibrated over walk-forward point-in-time outcomes without lookahead bias.
-                </p>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "10px" }}>
-                  {a3Evaluation.factor_contributions.slice(0, 4).map((fc: any, idx: number) => (
-                    <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: "11px" }}>
-                      <span style={{ color: "var(--text-primary)" }}>{fc.factor_id} ({fc.direction})</span>
-                      <span className="font-mono" style={{ color: fc.net_contribution >= 0 ? "var(--accent-green)" : "var(--accent-red)", fontWeight: "700" }}>
-                        β={fc.learned_beta} | net: {formatSignedFigure(fc.net_contribution)}
-                      </span>
+                <div className="flex flex-col gap-1.5 text-xs text-[#8b949e]">
+                  {a3Evaluation.supporting_evidence.map((ev: string, idx: number) => (
+                    <div key={idx} className="flex items-start gap-2">
+                      <span className="text-[#3fb950] font-mono font-bold">+</span>
+                      <span>{ev}</span>
+                    </div>
+                  ))}
+                  {a3Evaluation.contradicting_evidence.map((ev: string, idx: number) => (
+                    <div key={idx} className="flex items-start gap-2 text-[#586069]">
+                      <span className="text-[#f85149] font-mono font-bold">-</span>
+                      <span>{ev}</span>
                     </div>
                   ))}
                 </div>
+              </div>
 
-                <div style={{ marginTop: "10px", fontSize: "11px", color: "var(--accent-cyan)", display: "flex", justifyContent: "space-between" }}>
-                  <span>Quality Gates: {a3Evaluation.quality_gates.gate_summary}</span>
-                  <span>OOS Health: {a3Evaluation.oos_model_health}</span>
+              <div className="bg-[#10141d] border border-[#1b2230] p-3 rounded-[2px] flex flex-col justify-between">
+                <div>
+                  <div className="text-xs font-semibold text-[#8b949e] uppercase tracking-wider mb-2">
+                    Calibration & Guardrails
+                  </div>
+                  <div className="text-xs text-[#8b949e] leading-relaxed">
+                    Ridge-GAM empirical weighting applied over walk-forward point-in-time regimes without forward lookahead bias.
+                  </div>
+                </div>
+                <div className="pt-2.5 mt-2 border-t border-[#1b2230] flex items-center justify-between text-xs font-mono text-[#8b949e]">
+                  <div>
+                    <span className="text-[#586069]">Quality Gates: </span>
+                    <span className="text-[#e6edf3] font-semibold">{a3Evaluation.quality_gates.gate_summary}</span>
+                  </div>
+                  <div>
+                    <span className="text-[#586069]">OOS Health: </span>
+                    <span className="text-[#3fb950] font-semibold">{a3Evaluation.oos_model_health}</span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Reactive Dual-Axis Price & Sentiment Overlay Chart */}
-      <SentimentPriceChart data={tickerHistory} assetName={activeQuote?.symbol || symbolInput} />
+      {/* Reactive Dual-Axis Chart with Buy/Sell Overlays */}
+      <SentimentPriceChart
+        data={tickerHistory}
+        signals={chartSignals}
+        assetName={activeQuote?.symbol || symbolInput}
+      />
 
-      {/* Platform Factors & Metrics Cards */}
-      <div className="grid-4">
-        <div className="card">
-          <span className="card-title">Active Factors</span>
-          <span className="card-value">{signals.length}</span>
-          <span className="card-subtitle">Validated in catalog</span>
-        </div>
-        <div className="card">
-          <span className="card-title">Primary Ingestion Feed</span>
-          <span className="card-value" style={{ color: "var(--accent-green)", fontSize: "18px" }}>
-            COINBASE & REDDIT
-          </span>
-          <span className="card-subtitle">Live real-world API stream</span>
-        </div>
-        <div className="card">
-          <span className="card-title">Hypertable Engine</span>
-          <span className="card-value" style={{ color: "var(--accent-cyan)", fontSize: "18px" }}>
-            TIMESCALEDB
-          </span>
-          <span className="card-subtitle">Point-in-time indexed</span>
-        </div>
-        <div className="card">
-          <span className="card-title">Determinism Check</span>
-          <span className="card-value" style={{ color: "var(--accent-purple)", fontSize: "18px" }}>
-            100% AUDITABLE
-          </span>
-          <span className="card-subtitle">Zero lookahead bias</span>
-        </div>
-      </div>
+      {/* FACTOR ATTRIBUTION WATERFALL */}
+      {a3Evaluation?.factor_contributions && (
+        <FactorAttributionChart
+          factors={a3Evaluation.factor_contributions.map((fc: any) => ({
+            factor_name: fc.factor_id,
+            weight: Number(fc.learned_beta ?? 0.2),
+            z_score: Number(fc.z_score ?? (fc.net_contribution / 5)),
+            contribution_bps: Number(fc.net_contribution * 100),
+          }))}
+        />
+      )}
 
-      {/* Main Factor Table and History Inspector */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
-        {/* Factor Table */}
-        <div className="table-container">
-          <div className="table-header">
-            <span style={{ fontWeight: "700", fontSize: "14px" }}>Registered Quantitative Factors</span>
+      {/* FACTOR MATRIX: Institutional Research Table */}
+      {a3Evaluation?.factor_contributions && (
+        <div className="panel overflow-hidden">
+          <div className="panel-header">
+            <span className="panel-title flex items-center gap-2">
+              <LayersIcon size={14} className="text-[#d29922]" />
+              Factor Attribution Matrix & Applicability
+            </span>
+            <span className="text-xs font-mono text-[#8b949e]">
+              Asset: {activeQuote?.symbol}
+            </span>
           </div>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Factor Name</th>
-                <th>Version</th>
-                <th>Latest Value</th>
-                <th>Timestamp</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
+
+          <div className="overflow-x-auto">
+            <table className="terminal-table">
+              <thead>
                 <tr>
-                  <td colSpan={4} style={{ textAlign: "center", padding: "30px" }}>Loading signals...</td>
+                  <th>Factor ID</th>
+                  <th>Category</th>
+                  <th>Status</th>
+                  <th>Execution Role</th>
+                  <th className="text-right">Learned Weight (β)</th>
+                  <th className="text-right">Net Contribution</th>
+                  <th>Causal Provenance</th>
                 </tr>
-              ) : signals.length === 0 ? (
-                <tr>
-                  <td colSpan={4} style={{ textAlign: "center", padding: "30px" }}>No signals registered.</td>
-                </tr>
-              ) : (
-                signals.map((sig) => {
-                  const isSelected = selectedSignal?.id === sig.id;
+              </thead>
+              <tbody>
+                {a3Evaluation.factor_contributions.map((fc: any, idx: number) => {
+                  const isNotApp = fc.status === "NOT_APPLICABLE";
+                  const isCausal = fc.is_causal;
+
                   return (
-                    <tr
-                      key={sig.id}
-                      onClick={() => selectSignal(sig)}
-                      style={{
-                        cursor: "pointer",
-                        backgroundColor: isSelected ? "var(--bg-card-hover)" : undefined,
-                      }}
-                    >
-                      <td>
-                        <div style={{ fontWeight: "600", color: "var(--text-primary)" }}>{sig.name}</div>
+                    <tr key={idx} className={isNotApp ? "opacity-40" : ""}>
+                      <td className="font-mono font-bold text-[#e6edf3] text-xs">
+                        {fc.factor_id}
+                      </td>
+                      <td className="text-xs text-[#8b949e]">
+                        {fc.factor_id.includes("rsi") || fc.factor_id.includes("ema") || fc.factor_id.includes("momentum")
+                          ? "Technical"
+                          : fc.factor_id.includes("eps") || fc.factor_id.includes("roe") || fc.factor_id.includes("pe_ratio")
+                          ? "Fundamental"
+                          : fc.factor_id.includes("sentiment")
+                          ? "Sentiment"
+                          : "Microstructure"}
                       </td>
                       <td>
-                        <span className="badge badge-cyan font-mono">v{sig.version}</span>
-                      </td>
-                      <td className="font-mono">
-                        {sig.latest_value !== null ? (
-                          <span style={{ color: sig.latest_value >= 0 ? "var(--accent-green)" : "var(--accent-red)", fontWeight: "600" }}>
-                            {formatSignedFigure(sig.latest_value)}
+                        <span className="flex items-center gap-1.5 text-xs font-mono">
+                          <span className={`w-1.5 h-1.5 rounded-full ${isNotApp ? "bg-[#586069]" : "bg-[#3fb950]"}`} />
+                          <span className={isNotApp ? "text-[#7d8590]" : "text-[#c9d1d9]"}>
+                            {isNotApp ? `N/A (${activeQuote?.symbol})` : "Active"}
                           </span>
+                        </span>
+                      </td>
+                      <td>
+                        {isNotApp ? (
+                          <span className="text-xs text-[#586069] font-mono">Suppressed (β=0)</span>
+                        ) : isCausal ? (
+                          <span className="text-xs font-mono text-[#3fb950] font-semibold">Causal Executable</span>
                         ) : (
-                          <span style={{ color: "var(--text-muted)" }}>N/A</span>
+                          <span className="text-xs font-mono text-[#8b949e]">Diagnostic Only</span>
                         )}
                       </td>
-                      <td style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                        {sig.latest_timestamp ? new Date(sig.latest_timestamp).toLocaleTimeString() : "—"}
+                      <td className="text-right font-mono tabular-nums text-xs">
+                        {isNotApp ? "0.000" : Number(fc.learned_beta ?? 0).toFixed(3)}
+                      </td>
+                      <td className={`text-right font-mono tabular-nums font-semibold text-xs ${
+                        isNotApp
+                          ? "text-[#586069]"
+                          : fc.net_contribution > 0
+                          ? "text-[#3fb950]"
+                          : fc.net_contribution < 0
+                          ? "text-[#f85149]"
+                          : "text-[#8b949e]"
+                      }`}>
+                        {isNotApp ? "0.00%" : `${formatSignedFigure(fc.net_contribution)}%`}
+                      </td>
+                      <td className="text-xs text-[#7d8590] font-mono">
+                        {isNotApp
+                          ? "Crypto invariant: Fundamental equity metrics disallowed"
+                          : isCausal
+                          ? "Directly feeds position sizing vector"
+                          : "Informational layer only — does not execute trades"}
                       </td>
                     </tr>
                   );
-                })
-              )}
-            </tbody>
-          </table>
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* FACTOR CROSS-CORRELATION MATRIX HEATMAP */}
+      <FactorCorrelationMatrix />
+
+      {/* Factor Catalog & Historical Inspect */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+        {/* Catalog List */}
+        <div className="panel overflow-hidden">
+          <div className="panel-header">
+            <span className="panel-title">Catalog Factors</span>
+            <span className="text-xs font-mono text-[#8b949e]">
+              Total: {signals.length}
+            </span>
+          </div>
+          <div className="max-h-72 overflow-y-auto">
+            <table className="terminal-table">
+              <thead>
+                <tr>
+                  <th>Factor Name</th>
+                  <th>Version</th>
+                  <th className="text-right">Latest Value</th>
+                  <th>Timestamp</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={4} className="text-center py-6 text-[#586069] text-xs">
+                      Loading factor models...
+                    </td>
+                  </tr>
+                ) : (
+                  signals.map((sig) => {
+                    const isSelected = selectedSignal?.id === sig.id;
+                    return (
+                      <tr
+                        key={sig.id}
+                        onClick={() => selectSignal(sig)}
+                        className={`cursor-pointer transition-colors ${isSelected ? "bg-[#192231]/80" : "hover:bg-[#121722]"}`}
+                      >
+                        <td className="font-semibold text-[#e6edf3] text-xs">{sig.name}</td>
+                        <td className="text-[#8b949e] font-mono text-xs">{sig.version}</td>
+                        <td className="text-[#3fb950] font-semibold tabular-nums text-xs text-right">
+                          {sig.latest_value != null ? formatFigure(sig.latest_value) : "—"}
+                        </td>
+                        <td className="text-xs text-[#586069] font-mono">
+                          {sig.latest_timestamp ? new Date(sig.latest_timestamp).toLocaleTimeString() : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
 
-        {/* Selected Factor Details & History */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          {selectedSignal ? (
-            <div className="card">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span className="card-title">{selectedSignal.name}</span>
-                <span className="badge badge-amber font-mono">ID: {selectedSignal.id.slice(0, 8)}...</span>
-              </div>
-              
-              <div style={{ marginTop: "12px" }}>
-                <div style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", fontWeight: "600" }}>
-                  Model Parameters
-                </div>
-                <pre
-                  className="font-mono"
-                  style={{
-                    marginTop: "6px",
-                    padding: "10px",
-                    backgroundColor: "var(--bg-secondary)",
-                    borderRadius: "6px",
-                    fontSize: "11px",
-                    color: "var(--accent-cyan)",
-                    border: "1px solid var(--border-color)",
-                  }}
-                >
-                  {JSON.stringify(selectedSignal.parameters, null, 2)}
-                </pre>
-              </div>
-
-              {/* Time Series History Trajectory */}
-              <div style={{ marginTop: "16px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                  <span style={{ fontSize: "11px", textTransform: "uppercase", color: "var(--text-muted)", fontWeight: "600" }}>
-                    Point-In-Time Signal Values ({history?.datapoints.length || 0} ticks)
-                  </span>
-                  <span className="font-mono" style={{ fontSize: "11px", color: "var(--accent-green)" }}>
-                    ● TimescaleDB Query
-                  </span>
-                </div>
-
-                <div
-                  style={{
-                    height: "120px",
-                    backgroundColor: "var(--bg-secondary)",
-                    borderRadius: "6px",
-                    border: "1px solid var(--border-color)",
-                    padding: "12px",
-                    display: "flex",
-                    alignItems: "flex-end",
-                    gap: "4px",
-                  }}
-                >
-                  {history && history.datapoints.length > 0 ? (
-                    history.datapoints.map((pt, idx) => {
-                      const normalizedHeight = Math.max(15, Math.min(100, Math.abs(pt.value) * 60 + 30));
-                      const isPositive = pt.value >= 0;
-                      return (
-                        <div
-                          key={idx}
-                          title={`Time: ${new Date(pt.timestamp).toLocaleTimeString()}\nSignal Value: ${formatFigure(pt.value)}\nSpot Price: $${pt.metadata?.live_spot_price || 'N/A'}`}
-                          style={{
-                            flex: 1,
-                            height: `${normalizedHeight}%`,
-                            backgroundColor: isPositive ? "var(--accent-green)" : "var(--accent-red)",
-                            borderRadius: "2px",
-                            opacity: idx === history.datapoints.length - 1 ? 1 : 0.65,
-                          }}
-                        />
-                      );
-                    })
-                  ) : (
-                    <div style={{ width: "100%", textAlign: "center", color: "var(--text-muted)", fontSize: "12px", alignSelf: "center" }}>
-                      No history recorded yet
+        {/* Selected Factor Details */}
+        <div className="panel overflow-hidden">
+          <div className="panel-header">
+            <span className="panel-title">
+              Factor Details: {selectedSignal?.name ?? "None"}
+            </span>
+            <span className="text-xs font-mono text-[#8b949e]">
+              ID: {selectedSignal?.id ?? "—"}
+            </span>
+          </div>
+          <div className="p-3.5 text-xs font-mono flex flex-col gap-3">
+            {selectedSignal ? (
+              <>
+                <div className="grid grid-cols-2 gap-3 bg-[#10141d] p-3 rounded-[2px] border border-[#1b2230]">
+                  <div>
+                    <span className="metric-label">Version</span>
+                    <div className="text-[#e6edf3] font-bold text-sm mt-0.5">{selectedSignal.version}</div>
+                  </div>
+                  <div>
+                    <span className="metric-label">Last Observation</span>
+                    <div className="text-[#3fb950] font-bold text-sm tabular-nums mt-0.5">
+                      {selectedSignal.latest_value != null ? formatFigure(selectedSignal.latest_value) : "N/A"}
                     </div>
-                  )}
+                  </div>
                 </div>
-              </div>
-            </div>
-          ) : (
-            <div className="card" style={{ textAlign: "center", padding: "60px 20px" }}>
-              <span style={{ color: "var(--text-muted)", fontSize: "13px" }}>Select a factor to view trajectory</span>
-            </div>
-          )}
+
+                <div>
+                  <span className="metric-label block mb-1.5">Parameters</span>
+                  <pre className="bg-[#090c10] p-2.5 rounded-[2px] border border-[#1b2230] text-xs text-[#8b949e] overflow-x-auto leading-relaxed">
+                    {JSON.stringify(selectedSignal.parameters, null, 2)}
+                  </pre>
+                </div>
+
+                {history && history.datapoints.length > 0 && (
+                  <div>
+                    <span className="metric-label block mb-1.5">
+                      Point-in-Time Observations ({history.datapoints.length} points)
+                    </span>
+                    <div className="max-h-28 overflow-y-auto border border-[#1b2230] rounded-[2px]">
+                      <table className="terminal-table">
+                        <tbody>
+                          {history.datapoints.slice(0, 10).map((dp, i) => (
+                            <tr key={i}>
+                              <td className="text-xs text-[#586069] font-mono">
+                                {new Date(dp.timestamp).toLocaleTimeString()}
+                              </td>
+                              <td className="text-right text-[#e6edf3] tabular-nums font-semibold text-xs">
+                                {formatFigure(dp.value)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-center py-8 text-[#586069]">Select a factor to inspect</div>
+            )}
+          </div>
         </div>
       </div>
     </div>

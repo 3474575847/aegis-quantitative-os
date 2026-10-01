@@ -31,23 +31,20 @@ export default function EquityCurveChart({
 
   if (!data || data.length === 0) {
     return (
-      <div
-        className="card"
-        style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}
-      >
-        No equity curve data available.
+      <div className="panel p-8 text-center text-xs font-mono text-[#586069]">
+        No equity curve observations available for selected execution parameters.
       </div>
     );
   }
 
   const width = 800;
-  const height = 300;
-  const padLeft = 55;
+  const height = 280;
+  const padLeft = 60;
   const padRight = 20;
-  const padTop = 25;
-  const equityBottom = 200;
-  const drawdownTop = 220;
-  const drawdownBottom = 280;
+  const padTop = 20;
+  const equityBottom = 180;
+  const drawdownTop = 200;
+  const drawdownBottom = 260;
 
   const equities = data.map((d) => d.equity);
   const minEquity = Math.min(...equities, 0.98);
@@ -66,7 +63,6 @@ export default function EquityCurveChart({
   const getDrawdownY = (dd: number) =>
     drawdownTop + (Math.abs(dd) / Math.abs(minDrawdown || 0.01)) * (drawdownBottom - drawdownTop);
 
-  // Generate equity SVG path
   const equityPath = data
     .map(
       (d, i) => `${i === 0 ? 'M' : 'L'} ${getX(i).toFixed(1)} ${getEquityY(d.equity).toFixed(1)}`,
@@ -75,7 +71,6 @@ export default function EquityCurveChart({
 
   const equityArea = `${equityPath} L ${getX(numPoints - 1).toFixed(1)} ${equityBottom} L ${getX(0).toFixed(1)} ${equityBottom} Z`;
 
-  // Generate drawdown SVG path
   const drawdownPath = data
     .map(
       (d, i) =>
@@ -110,7 +105,6 @@ export default function EquityCurveChart({
   const finalEq = data[data.length - 1]?.equity || 1.0;
   const isPositive = finalEq >= initialEq;
 
-  // Format date display
   const formatDate = (ts: string) => {
     if (!ts) return '';
     if (ts.length >= 16) {
@@ -123,317 +117,187 @@ export default function EquityCurveChart({
   };
 
   return (
-    <div className="card" ref={containerRef} style={{ position: 'relative', overflow: 'hidden' }}>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '8px',
-        }}
-      >
-        <div>
-          <span className="card-title">{title}</span>
-          <div style={{ display: 'flex', gap: '16px', marginTop: '4px' }}>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              Start:{' '}
-              <strong className="font-mono" style={{ color: 'var(--text-primary)' }}>
-                {formatFigure(initialEq)}
-              </strong>
+    <div className="panel overflow-hidden" ref={containerRef}>
+      <div className="panel-header">
+        <div className="flex items-center gap-3">
+          <span className="panel-title">{title}</span>
+          <div className="hidden sm:flex items-center gap-3 text-[11px] font-mono text-[#8b949e]">
+            <span>
+              START: <strong className="text-[#e6edf3]">{formatFigure(initialEq)}</strong>
             </span>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              Current:{' '}
-              <strong
-                className="font-mono"
-                style={{ color: isPositive ? 'var(--accent-green)' : 'var(--accent-red)' }}
-              >
+            <span>
+              FINAL:{' '}
+              <strong className={isPositive ? 'text-[#3fb950]' : 'text-[#f85149]'}>
                 {formatFigure(finalEq)} ({formatPercent((finalEq - initialEq) / initialEq)})
               </strong>
             </span>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              Peak Drawdown:{' '}
-              <strong className="font-mono" style={{ color: 'var(--accent-red)' }}>
-                {formatPercent(minDrawdown)}
-              </strong>
+            <span>
+              MAX DD: <strong className="text-[#f85149]">{formatPercent(minDrawdown)}</strong>
             </span>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <span className="badge badge-green font-mono" style={{ fontSize: '10px' }}>
-            NEXT-BAR EXECUTION
-          </span>
-          <span className="badge badge-cyan font-mono" style={{ fontSize: '10px' }}>
-            POINT-IN-TIME
-          </span>
+
+        <div className="flex items-center gap-2 text-[10px] font-mono text-[#7d8590]">
+          <span>NEXT-BAR</span>
+          <span>·</span>
+          <span>POINT-IN-TIME</span>
         </div>
       </div>
 
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        style={{ width: '100%', height: 'auto', display: 'block', cursor: 'crosshair' }}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
-      >
-        <defs>
-          <linearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop
-              offset="0%"
-              stopColor={isPositive ? 'var(--accent-green, #10b981)' : 'var(--accent-red, #ef4444)'}
-              stopOpacity="0.25"
-            />
-            <stop
-              offset="100%"
-              stopColor={isPositive ? 'var(--accent-green, #10b981)' : 'var(--accent-red, #ef4444)'}
-              stopOpacity="0.0"
-            />
-          </linearGradient>
-          <linearGradient id="drawdownGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#ef4444" stopOpacity="0.05" />
-            <stop offset="100%" stopColor="#ef4444" stopOpacity="0.35" />
-          </linearGradient>
-        </defs>
-
-        {/* Grid lines & Axis labels */}
-        <line
-          x1={padLeft}
-          y1={padTop}
-          x2={width - padRight}
-          y2={padTop}
-          stroke="var(--border-color, #333)"
-          strokeDasharray="3 3"
-        />
-        <line
-          x1={padLeft}
-          y1={equityBottom}
-          x2={width - padRight}
-          y2={equityBottom}
-          stroke="var(--border-color, #333)"
-        />
-        <line
-          x1={padLeft}
-          y1={drawdownTop}
-          x2={width - padRight}
-          y2={drawdownTop}
-          stroke="var(--border-color, #333)"
-        />
-        <line
-          x1={padLeft}
-          y1={drawdownBottom}
-          x2={width - padRight}
-          y2={drawdownBottom}
-          stroke="var(--border-color, #333)"
-          strokeDasharray="3 3"
-        />
-
-        {/* Y Axis ticks */}
-        <text
-          x={padLeft - 8}
-          y={padTop + 4}
-          fill="var(--text-muted)"
-          fontSize="10"
-          textAnchor="end"
-          className="font-mono"
+      <div className="p-3 bg-[#0d1017]">
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          className="w-full h-auto block select-none cursor-crosshair"
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
         >
-          {formatFigure(maxEquity)}
-        </text>
-        <text
-          x={padLeft - 8}
-          y={getEquityY(1.0) + 4}
-          fill="var(--text-muted)"
-          fontSize="10"
-          textAnchor="end"
-          className="font-mono"
-        >
-          1.000
-        </text>
-        <text
-          x={padLeft - 8}
-          y={equityBottom - 2}
-          fill="var(--text-muted)"
-          fontSize="10"
-          textAnchor="end"
-          className="font-mono"
-        >
-          {formatFigure(minEquity)}
-        </text>
-        <text
-          x={padLeft - 8}
-          y={drawdownTop + 10}
-          fill="var(--text-muted)"
-          fontSize="9"
-          textAnchor="end"
-          className="font-mono"
-        >
-          0.0%
-        </text>
-        <text
-          x={padLeft - 8}
-          y={drawdownBottom}
-          fill="var(--accent-red)"
-          fontSize="9"
-          textAnchor="end"
-          className="font-mono"
-        >
-          {formatPercent(minDrawdown)}
-        </text>
+          <defs>
+            <linearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop
+                offset="0%"
+                stopColor={isPositive ? '#3fb950' : '#f85149'}
+                stopOpacity="0.18"
+              />
+              <stop
+                offset="100%"
+                stopColor={isPositive ? '#3fb950' : '#f85149'}
+                stopOpacity="0.0"
+              />
+            </linearGradient>
+            <linearGradient id="drawdownGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#f85149" stopOpacity="0.04" />
+              <stop offset="100%" stopColor="#f85149" stopOpacity="0.25" />
+            </linearGradient>
+          </defs>
 
-        {/* Baseline 1.0 guideline */}
-        <line
-          x1={padLeft}
-          y1={getEquityY(1.0)}
-          x2={width - padRight}
-          y2={getEquityY(1.0)}
-          stroke="var(--text-muted)"
-          strokeOpacity="0.4"
-          strokeDasharray="2 2"
-        />
+          {/* Grid lines */}
+          <line
+            x1={padLeft}
+            y1={padTop}
+            x2={width - padRight}
+            y2={padTop}
+            stroke="#1b2230"
+            strokeDasharray="2 2"
+          />
+          <line
+            x1={padLeft}
+            y1={equityBottom}
+            x2={width - padRight}
+            y2={equityBottom}
+            stroke="#1b2230"
+          />
+          <line
+            x1={padLeft}
+            y1={drawdownTop}
+            x2={width - padRight}
+            y2={drawdownTop}
+            stroke="#1b2230"
+          />
+          <line
+            x1={padLeft}
+            y1={drawdownBottom}
+            x2={width - padRight}
+            y2={drawdownBottom}
+            stroke="#1b2230"
+            strokeDasharray="2 2"
+          />
 
-        {/* Equity Fill and Line */}
-        <path d={equityArea} fill="url(#equityGradient)" />
-        <path
-          d={equityPath}
-          fill="none"
-          stroke={isPositive ? 'var(--accent-green, #10b981)' : 'var(--accent-red, #ef4444)'}
-          strokeWidth="2"
-        />
+          {/* Y Axis ticks */}
+          <text
+            x={padLeft - 8}
+            y={padTop + 4}
+            fill="#586069"
+            fontSize="10"
+            textAnchor="end"
+            fontFamily="var(--font-mono)"
+          >
+            {formatFigure(maxEquity)}
+          </text>
+          <text
+            x={padLeft - 8}
+            y={equityBottom}
+            fill="#586069"
+            fontSize="10"
+            textAnchor="end"
+            fontFamily="var(--font-mono)"
+          >
+            {formatFigure(minEquity)}
+          </text>
+          <text
+            x={padLeft - 8}
+            y={drawdownTop + 4}
+            fill="#586069"
+            fontSize="10"
+            textAnchor="end"
+            fontFamily="var(--font-mono)"
+          >
+            0%
+          </text>
+          <text
+            x={padLeft - 8}
+            y={drawdownBottom}
+            fill="#f85149"
+            fontSize="10"
+            textAnchor="end"
+            fontFamily="var(--font-mono)"
+          >
+            {formatPercent(minDrawdown)}
+          </text>
 
-        {/* Drawdown Fill and Line */}
-        <path d={drawdownArea} fill="url(#drawdownGradient)" />
-        <path
-          d={drawdownPath}
-          fill="none"
-          stroke="var(--accent-red, #ef4444)"
-          strokeWidth="1.5"
-          strokeOpacity="0.8"
-        />
+          {/* Area Fills */}
+          <path d={equityArea} fill="url(#equityGradient)" />
+          <path d={drawdownArea} fill="url(#drawdownGradient)" />
 
-        {/* Section labels */}
-        <text
-          x={width - padRight}
-          y={padTop + 14}
-          fill="var(--text-muted)"
-          fontSize="10"
-          textAnchor="end"
-          opacity="0.6"
-        >
-          Strategy Equity
-        </text>
-        <text
-          x={width - padRight}
-          y={drawdownTop + 14}
-          fill="var(--accent-red)"
-          fontSize="9"
-          textAnchor="end"
-          opacity="0.6"
-        >
-          Underwater Drawdown
-        </text>
+          {/* Strokes */}
+          <path
+            d={equityPath}
+            fill="none"
+            stroke={isPositive ? '#3fb950' : '#f85149'}
+            strokeWidth="1.5"
+          />
+          <path d={drawdownPath} fill="none" stroke="#f85149" strokeWidth="1" />
 
-        {/* X Axis Time Labels */}
-        {data.length > 0 && (
-          <>
-            <text
-              x={padLeft}
-              y={height - 5}
-              fill="var(--text-muted)"
-              fontSize="9"
-              className="font-mono"
-            >
-              {formatDate(data[0].timestamp)}
-            </text>
-            <text
-              x={width / 2}
-              y={height - 5}
-              fill="var(--text-muted)"
-              fontSize="9"
-              textAnchor="middle"
-              className="font-mono"
-            >
-              {formatDate(data[Math.floor(numPoints / 2)].timestamp)}
-            </text>
-            <text
-              x={width - padRight}
-              y={height - 5}
-              fill="var(--text-muted)"
-              fontSize="9"
-              textAnchor="end"
-              className="font-mono"
-            >
-              {formatDate(data[numPoints - 1].timestamp)}
-            </text>
-          </>
-        )}
+          {/* Hover Crosshair */}
+          {hover && (
+            <g>
+              <line
+                x1={hover.x}
+                y1={padTop}
+                x2={hover.x}
+                y2={drawdownBottom}
+                stroke="#d29922"
+                strokeWidth="1"
+                strokeDasharray="2 2"
+              />
+              <circle
+                cx={hover.x}
+                cy={getEquityY(hover.equity)}
+                r="3"
+                fill="#d29922"
+              />
+            </g>
+          )}
+        </svg>
 
-        {/* Hover Crosshair & Tooltip Indicator */}
+        {/* Hover Readout Bar */}
         {hover && (
-          <g>
-            <line
-              x1={hover.x}
-              y1={padTop}
-              x2={hover.x}
-              y2={drawdownBottom}
-              stroke="var(--accent-cyan, #06b6d4)"
-              strokeWidth="1"
-              strokeDasharray="2 2"
-            />
-            <circle
-              cx={hover.x}
-              cy={getEquityY(hover.equity)}
-              r="4"
-              fill="var(--accent-cyan, #06b6d4)"
-              stroke="var(--bg-primary, #000)"
-              strokeWidth="2"
-            />
-            <circle
-              cx={hover.x}
-              cy={getDrawdownY(hover.drawdown)}
-              r="3"
-              fill="var(--accent-red, #ef4444)"
-              stroke="var(--bg-primary, #000)"
-              strokeWidth="1"
-            />
-          </g>
+          <div className="mt-2 pt-2 border-t border-[#19202e] flex items-center justify-between text-[11px] font-mono text-[#8b949e]">
+            <div>
+              <span className="text-[#586069]">BAR #{hover.index + 1} · </span>
+              <span>{formatDate(hover.timestamp)}</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <span>
+                EQUITY: <strong className="text-[#e6edf3]">{formatFigure(hover.equity)}</strong>
+              </span>
+              <span>
+                DRAWDOWN:{' '}
+                <strong className="text-[#f85149]">{formatPercent(hover.drawdown)}</strong>
+              </span>
+            </div>
+          </div>
         )}
-      </svg>
-
-      {/* Interactive Tooltip Card */}
-      {hover && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '50px',
-            left: `${Math.min(Math.max((hover.x / width) * 100, 15), 80)}%`,
-            transform: 'translateX(-50%)',
-            backgroundColor: 'rgba(18, 20, 29, 0.95)',
-            backdropFilter: 'blur(8px)',
-            border: '1px solid var(--border-color)',
-            padding: '8px 12px',
-            borderRadius: '6px',
-            pointerEvents: 'none',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '4px',
-            minWidth: '160px',
-          }}
-        >
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }} className="font-mono">
-            {hover.timestamp.replace('T', ' ').replace('Z', '')}
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-            <span style={{ color: 'var(--text-secondary)' }}>Equity:</span>
-            <strong className="font-mono" style={{ color: 'var(--accent-cyan)' }}>
-              {formatFigure(hover.equity)}
-            </strong>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-            <span style={{ color: 'var(--text-secondary)' }}>Drawdown:</span>
-            <strong className="font-mono" style={{ color: 'var(--accent-red)' }}>
-              {formatPercent(hover.drawdown)}
-            </strong>
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }

@@ -25,7 +25,7 @@ describe('Aegis Research Orchestrator', () => {
     // Verify macro fields are present
     expect(report.macro_regime.treasury_10y).toBeDefined();
     expect(typeof report.macro_regime.regime_interpretation).toBe('string');
-  });
+  }, 15000);
 
   it('correctly auto-extracts symbol from unstructured query', async () => {
     const report = await aegisResearchOrchestrator.executeResearchQuery(

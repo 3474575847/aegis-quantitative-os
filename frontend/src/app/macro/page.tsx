@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { apiUrl } from '@/lib/api';
+import MacroRegimeQuadrant from '../components/visuals/MacroRegimeQuadrant';
+import YieldCurveChart from '../components/visuals/YieldCurveChart';
 
 type SeriesPoint = {
   observation_date: string;
@@ -99,13 +101,13 @@ function TrendPlot({ series, color }: { series: MacroSeries | undefined; color: 
 
 function IndicatorCard({ indicator, label, unit }: { indicator: Indicator | null; label: string; unit: string }) {
   return (
-    <div className="card" style={{ gap: '8px' }}>
-      <span className="card-title">{label}</span>
-      <span className="card-value" style={{ fontSize: '22px', color: indicator ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+    <div className="bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px] flex flex-col justify-between">
+      <span className="metric-label">{label}</span>
+      <span className={`text-xl font-bold font-mono tabular-nums mt-1 ${indicator ? 'text-[#e6edf3]' : 'text-[#586069]'}`}>
         {indicator ? formatValue(indicator.value, unit) : 'N/A'}
       </span>
-      <span className="card-subtitle">Observation: {formatDate(indicator?.observation_date)}</span>
-      <span className="card-subtitle font-mono" style={{ fontSize: '10px' }}>PIT available: {formatDate(indicator?.available_at)}</span>
+      <span className="text-[11px] text-[#8b949e] font-mono mt-1">Obs: {formatDate(indicator?.observation_date)}</span>
+      <span className="text-[10px] text-[#586069] font-mono">PIT: {formatDate(indicator?.available_at)}</span>
     </div>
   );
 }
@@ -170,86 +172,146 @@ export default function MacroObservatoryPage() {
   const regimeColor = regimeTone(regime?.regime ?? 'UNKNOWN');
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+    <div className="flex flex-col gap-4 pb-10">
+      {/* Page Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-[#1b2230]">
         <div>
-          <h1 style={{ fontSize: '20px', fontWeight: 700 }}>Macro Observatory</h1>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '5px', maxWidth: '720px' }}>
-            Point-in-time FRED observations for rates, inflation, labor, and credit conditions. Directional regime labels are deterministic views over stored history.
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-[1px] bg-[#d29922]" />
+            <h1 className="text-base font-bold tracking-tight text-[#e6edf3] font-mono">
+              Macro Observatory
+            </h1>
+          </div>
+          <p className="text-xs text-[#8b949e] mt-1 font-mono">
+            Point-in-time FRED observations for interest rates, inflation, labor & directional regime classification
           </p>
         </div>
-        <button className="btn btn-secondary" onClick={() => void loadObservatory()} disabled={loading}>
-          {loading ? 'Refreshing…' : 'Refresh'}
+        <button className="terminal-btn text-xs" onClick={() => void loadObservatory()} disabled={loading}>
+          {loading ? 'Refreshing…' : 'Refresh Telemetry'}
         </button>
       </div>
 
-      {error && <div style={{ padding: '10px 14px', border: '1px solid var(--accent-red)', background: 'var(--accent-red-dim)', color: 'var(--accent-red)', borderRadius: '6px', fontSize: '12px' }}>{error}</div>}
+      {error && (
+        <div className="p-3 bg-[#28161a] border border-[#482025] text-[#f85149] text-xs font-mono rounded-[2px]">
+          {error}
+        </div>
+      )}
 
-      <div className="grid-4">
-        <div className="card" style={{ borderColor: regimeColor }}>
-          <span className="card-title">Current regime</span>
-          <span className="card-value" style={{ color: regimeColor, fontSize: '22px' }}>{regime?.regime ?? 'UNKNOWN'}</span>
-          <span className="card-subtitle">Confidence: {regime?.confidence ?? 'UNAVAILABLE'}</span>
-          <span className="card-subtitle font-mono" style={{ fontSize: '10px' }}>Classified: {formatDate(regime?.classified_at)}</span>
+      {/* Regime Classification Strip */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px] flex flex-col justify-between">
+          <span className="metric-label">Macro Regime</span>
+          <span className="text-xl font-bold font-mono mt-1" style={{ color: regimeColor }}>
+            {regime?.regime ?? 'UNKNOWN'}
+          </span>
+          <span className="text-[11px] text-[#8b949e] font-mono mt-1">Confidence: {regime?.confidence ?? 'UNAVAILABLE'}</span>
+          <span className="text-[10px] text-[#586069] font-mono">Classified: {formatDate(regime?.classified_at)}</span>
         </div>
-        <div className="card">
-          <span className="card-title">10Y − 2Y slope</span>
-          <span className="card-value" style={{ color: yields?.is_inverted ? 'var(--accent-red)' : 'var(--accent-green)', fontSize: '22px' }}>{formatValue(yields?.slope_bps, ' bps')}</span>
-          <span className="card-subtitle">{yields?.is_inverted ? 'Inverted curve' : 'Normal curve'}</span>
-          <span className="card-subtitle font-mono" style={{ fontSize: '10px' }}>Retrieved: {formatDate(yields?.retrieved_at)}</span>
+
+        <div className="bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px] flex flex-col justify-between">
+          <span className="metric-label">10Y − 2Y Yield Slope</span>
+          <span className={`text-xl font-bold font-mono tabular-nums mt-1 ${yields?.is_inverted ? 'text-[#f85149]' : 'text-[#3fb950]'}`}>
+            {formatValue(yields?.slope_bps, ' bps')}
+          </span>
+          <span className="text-[11px] text-[#8b949e] font-mono mt-1">{yields?.is_inverted ? 'Inverted Curve (Recession Warning)' : 'Normal Slope'}</span>
+          <span className="text-[10px] text-[#586069] font-mono">Retrieved: {formatDate(yields?.retrieved_at)}</span>
         </div>
-        <div className="card">
-          <span className="card-title">Growth direction</span>
-          <span className="card-value" style={{ color: regime?.growth_direction === 'DOWN' ? 'var(--accent-red)' : 'var(--accent-cyan)', fontSize: '22px' }}>{regime?.growth_direction ?? 'UNKNOWN'}</span>
-          <span className="card-subtitle">UNRATE 3M change: {formatValue(regime?.growth_change_3m)}</span>
+
+        <div className="bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px] flex flex-col justify-between">
+          <span className="metric-label">Growth Direction</span>
+          <span className={`text-xl font-bold font-mono mt-1 ${regime?.growth_direction === 'DOWN' ? 'text-[#f85149]' : 'text-[#58a6ff]'}`}>
+            {regime?.growth_direction ?? 'UNKNOWN'}
+          </span>
+          <span className="text-[11px] text-[#8b949e] font-mono mt-1">UNRATE 3M Δ: {formatValue(regime?.growth_change_3m)}</span>
+          <span className="text-[10px] text-[#586069] font-mono">Labor momentum</span>
         </div>
-        <div className="card">
-          <span className="card-title">Inflation direction</span>
-          <span className="card-value" style={{ color: regime?.inflation_direction === 'UP' ? 'var(--accent-red)' : 'var(--accent-cyan)', fontSize: '22px' }}>{regime?.inflation_direction ?? 'UNKNOWN'}</span>
-          <span className="card-subtitle">CPI 3M change: {formatValue(regime?.inflation_change_3m)}</span>
+
+        <div className="bg-[#10141d] border border-[#1b2230] p-3.5 rounded-[2px] flex flex-col justify-between">
+          <span className="metric-label">Inflation Direction</span>
+          <span className={`text-xl font-bold font-mono mt-1 ${regime?.inflation_direction === 'UP' ? 'text-[#f85149]' : 'text-[#58a6ff]'}`}>
+            {regime?.inflation_direction ?? 'UNKNOWN'}
+          </span>
+          <span className="text-[11px] text-[#8b949e] font-mono mt-1">CPI 3M Δ: {formatValue(regime?.inflation_change_3m)}</span>
+          <span className="text-[10px] text-[#586069] font-mono">Price trend</span>
         </div>
       </div>
 
-      <div className="grid-4">
+      {/* Rates & Credit Metrics */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <IndicatorCard indicator={yields?.dgs10 ?? null} label="10Y Treasury" unit="%" />
         <IndicatorCard indicator={yields?.dgs2 ?? null} label="2Y Treasury" unit="%" />
-        <IndicatorCard indicator={yields?.fedfunds ?? null} label="Fed funds" unit="%" />
-        <IndicatorCard indicator={yields?.credit_spread ?? null} label="High-yield spread" unit="%" />
+        <IndicatorCard indicator={yields?.fedfunds ?? null} label="Fed Funds Target" unit="%" />
+        <IndicatorCard indicator={yields?.credit_spread ?? null} label="High-Yield Spread" unit="%" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '20px', alignItems: 'start' }}>
-        <div className="table-container">
-          <div className="table-header">
-            <span style={{ fontWeight: 600, fontSize: '13px' }}>Stored macro history</span>
-            <span className="font-mono" style={{ fontSize: '10px', color: 'var(--text-muted)' }}>FRED / PIT snapshots</span>
+      {/* Visual Cockpit: Regime Quadrant & Yield Curve */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+        <MacroRegimeQuadrant
+          currentRegime={regime?.regime ?? 'GOLDILOCKS'}
+          growthChange={regime?.growth_change_3m}
+          inflationChange={regime?.inflation_change_3m}
+          confidence={regime?.confidence}
+        />
+        <YieldCurveChart
+          dgs10={yields?.dgs10?.value}
+          dgs2={yields?.dgs2?.value}
+          fedfunds={yields?.fedfunds?.value}
+          slopeBps={yields?.slope_bps}
+          isInverted={yields?.is_inverted ?? false}
+        />
+      </div>
+
+      {/* History & Methodology Split */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
+        <div className="lg:col-span-8 panel overflow-hidden">
+          <div className="panel-header">
+            <span className="panel-title">Stored Macro Time-Series History</span>
+            <span className="text-xs font-mono text-[#8b949e]">FRED / PIT Snapshots</span>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div className="flex flex-col divide-y divide-[#1b2230]">
             {SERIES.map((item) => (
-              <div key={item.id} style={{ display: 'grid', gridTemplateColumns: '150px 1fr 110px', gap: '16px', alignItems: 'center', padding: '14px 20px', borderBottom: '1px solid var(--border-color)' }}>
-                <div>
-                  <div className="font-mono" style={{ fontSize: '12px', color: item.color }}>{item.id}</div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '3px' }}>{item.label}</div>
+              <div key={item.id} className="grid grid-cols-12 gap-4 items-center p-3.5">
+                <div className="col-span-4">
+                  <div className="font-mono text-xs font-bold" style={{ color: item.color }}>{item.id}</div>
+                  <div className="text-xs text-[#8b949e] mt-0.5">{item.label}</div>
                 </div>
-                <TrendPlot series={series[item.id]} color={item.color} />
-                <div style={{ textAlign: 'right' }}>
-                  <div className="font-mono" style={{ fontSize: '12px' }}>{formatValue(series[item.id]?.datapoints.at(-1)?.value)}</div>
-                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '3px' }}>{series[item.id]?.count ?? 0} points</div>
+                <div className="col-span-5">
+                  <TrendPlot series={series[item.id]} color={item.color} />
+                </div>
+                <div className="col-span-3 text-right">
+                  <div className="font-mono text-sm font-bold text-[#e6edf3] tabular-nums">
+                    {formatValue(series[item.id]?.datapoints.at(-1)?.value)}
+                  </div>
+                  <div className="text-[10px] text-[#586069] font-mono mt-0.5">
+                    {series[item.id]?.count ?? 0} points
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="card" style={{ gap: '14px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span className="card-title">Regime methodology</span>
-            <span className="badge badge-cyan">{regime?.confidence ?? 'N/A'}</span>
+        <div className="lg:col-span-4 panel p-4 flex flex-col gap-3">
+          <div className="flex justify-between items-center pb-2 border-b border-[#1b2230]">
+            <span className="metric-label">Regime Methodology</span>
+            <span className="text-xs font-mono text-[#58a6ff]">{regime?.confidence ?? 'N/A'}</span>
           </div>
-          <p style={{ fontSize: '12px', lineHeight: 1.6, color: 'var(--text-secondary)' }}>{regime?.methodology ?? 'Awaiting stored UNRATE and CPIAUCSL observations.'}</p>
-          <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', display: 'grid', gap: '8px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}><span style={{ color: 'var(--text-muted)' }}>Growth indicator</span><span className="font-mono">{formatValue(regime?.growth_indicator?.value, '%')}</span></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}><span style={{ color: 'var(--text-muted)' }}>Inflation indicator</span><span className="font-mono">{formatValue(regime?.inflation_indicator?.value)}</span></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}><span style={{ color: 'var(--text-muted)' }}>PIT source</span><span className="font-mono" style={{ color: 'var(--accent-cyan)' }}>FRED / Aegis</span></div>
+          <p className="text-xs text-[#8b949e] leading-relaxed">
+            {regime?.methodology ?? 'Awaiting stored UNRATE and CPIAUCSL observations.'}
+          </p>
+          <div className="border-t border-[#1b2230] pt-3 flex flex-col gap-2 text-xs font-mono">
+            <div className="flex justify-between">
+              <span className="text-[#586069]">Growth Indicator</span>
+              <span className="text-[#e6edf3]">{formatValue(regime?.growth_indicator?.value, '%')}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#586069]">Inflation Indicator</span>
+              <span className="text-[#e6edf3]">{formatValue(regime?.inflation_indicator?.value)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#586069]">Provenance</span>
+              <span className="text-[#58a6ff]">FRED / Aegis PIT</span>
+            </div>
           </div>
         </div>
       </div>
