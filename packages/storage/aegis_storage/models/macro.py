@@ -11,7 +11,7 @@ import uuid
 from datetime import date, datetime
 
 from aegis_storage.models.base import Base, SQLiteCompatibleJSONB
-from sqlalchemy import Date, Float, Index, String, UniqueConstraint
+from sqlalchemy import Date, DateTime, Float, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -47,7 +47,7 @@ class MacroObservationRecord(Base):
     value: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # PIT look-ahead barrier: when Aegis first retrieved this value
-    available_at: Mapped[datetime] = mapped_column(nullable=False)
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # Provider (always "FRED" for now)
     provider: Mapped[str] = mapped_column(String(32), nullable=False, default="FRED")

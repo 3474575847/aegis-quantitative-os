@@ -16,7 +16,7 @@ echo -e "${YELLOW}Stopping Aegis-Alpha local processes...${NC}"
 pkill -f "uvicorn aegis_api.main:app" > /dev/null 2>&1 || true
 pkill -f "aegis_worker.main" > /dev/null 2>&1 || true
 lsof -ti:8000 | xargs kill -9 > /dev/null 2>&1 || true
-lsof -ti:3000 | xargs kill -9 > /dev/null 2>&1 || true
+lsof -ti:3001 | xargs kill -9 > /dev/null 2>&1 || true
 
 echo -e "${GREEN}API, Worker, and Frontend processes stopped.${NC}"
 

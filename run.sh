@@ -81,14 +81,14 @@ PIDS+=($!)
 
 # 4. Start Next.js Frontend
 echo -e "\n${YELLOW}[4/4] Starting Next.js Command Center...${NC}"
-echo -e "  - Launching Frontend on port 3000..."
+echo -e "  - Launching Frontend on port 3001..."
 (cd frontend && npm run dev) &
 PIDS+=($!)
 
 echo -e "\n${GREEN}=========================================${NC}"
 echo -e "${GREEN}  Aegis-Alpha Platform is Live!          ${NC}"
 echo -e "${GREEN}=========================================${NC}"
-echo -e "  - Web Command Center : ${BLUE}http://localhost:3000${NC}"
+echo -e "  - Web Command Center : ${BLUE}http://localhost:3001${NC}"
 echo -e "  - FastAPI Docs       : ${BLUE}http://localhost:8000/docs${NC}"
 echo -e "  - System Status      : ${BLUE}http://localhost:8000/api/system/status${NC}"
 echo -e "  - Health Check       : ${BLUE}http://localhost:8000/health${NC}"

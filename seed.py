@@ -13,13 +13,7 @@ from alembic import command
 from alembic.config import Config
 
 
-async def main() -> None:
-    db_url = os.getenv(
-        "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/aegis"
-    )
-    print(f"Connecting to database at {db_url}...")
-    db_manager = DatabaseManager(db_url)
-
+def run_migrations(db_url: str) -> None:
     try:
         alembic_config = Config(
             str(Path(__file__).resolve().parent / "packages/storage/alembic.ini")
@@ -30,6 +24,14 @@ async def main() -> None:
     except Exception as e:
         print(f"Error during database migration: {e}")
         raise
+
+
+async def main() -> None:
+    db_url = os.getenv(
+        "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/aegis"
+    )
+    print(f"Connecting to database at {db_url}...")
+    db_manager = DatabaseManager(db_url)
 
     async for session in db_manager.get_session():
         # Let's verify if data already exists to avoid duplicate seed
@@ -173,4 +175,8 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    db_conn = os.getenv(
+        "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/aegis"
+    )
+    run_migrations(db_conn)
     asyncio.run(main())
