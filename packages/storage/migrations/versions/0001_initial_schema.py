@@ -39,10 +39,17 @@ def upgrade() -> None:
             ("macro_observations", "observation_date"),
         )
         for table_name, time_column in hypertables:
-            bind.execute(
-                text("SELECT create_hypertable(:table_name, :time_column, if_not_exists => TRUE)"),
-                {"table_name": table_name, "time_column": time_column},
-            )
+            # Use a savepoint so a failure (e.g. no TimescaleDB on Neon/plain Postgres)
+            # does not abort the outer Alembic transaction.
+            sp = bind.begin_nested()
+            try:
+                bind.execute(
+                    text("SELECT create_hypertable(:table_name, :time_column, if_not_exists => TRUE)"),
+                    {"table_name": table_name, "time_column": time_column},
+                )
+                sp.commit()
+            except Exception:
+                sp.rollback()
 
 
 def downgrade() -> None:
