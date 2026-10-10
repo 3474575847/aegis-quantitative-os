@@ -7,8 +7,22 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from aegis_storage.models.base import Base
 
 
+def _fix_asyncpg_url(url: str) -> str:
+    """
+    asyncpg does not accept sslmode= as a query parameter.
+    Convert ?sslmode=require -> ?ssl=require and strip channel_binding.
+    """
+    url = url.replace("sslmode=require", "ssl=require")
+    url = url.replace("&channel_binding=require", "")
+    url = url.replace("channel_binding=require&", "")
+    url = url.replace("?channel_binding=require", "")
+    return url
+
+
 class DatabaseManager:
     def __init__(self, database_url: str):
+        if "+asyncpg" in database_url:
+            database_url = _fix_asyncpg_url(database_url)
         self.engine = create_async_engine(database_url, echo=False)
         self.session_factory = async_sessionmaker(
             self.engine,
