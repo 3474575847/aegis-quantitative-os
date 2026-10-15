@@ -146,6 +146,19 @@ code, pre, .font-mono {
   padding: 16px 20px;
 }
 
+.site-credit {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border-subtle);
+  padding: 10px 16px;
+  background-color: var(--bg-sidebar);
+  color: var(--accent-gold);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  text-align: right;
+}
+
 /* Navigation System */
 .nav-section-label {
   font-size: 10px;
@@ -616,4 +629,3 @@ code, pre, .font-mono {
   margin-top: 2px;
   font-family: var(--font-sans);
 }
-

@@ -31,6 +31,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="terminal-main">
             <TopMarketBar />
             <main className="terminal-viewport">{children}</main>
+            <footer className="site-credit">
+              Designed and developed entirely by Aryan Jindal
+            </footer>
           </div>
         </div>
       </body>
